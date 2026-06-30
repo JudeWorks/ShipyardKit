@@ -1,6 +1,6 @@
 # User Setup Folder
 
-This folder is the easiest handoff point for a developer or coding LLM installing ShipyardKit.
+This folder is the easiest handoff point for a developer or installer setting up ShipyardKit.
 
 ## Before you start
 
@@ -50,9 +50,9 @@ The public mobile session endpoint rejects disabled products. In Shipyard, make 
 - the product exists in the Shipyard workspace
 - app engagement is enabled for the product
 
-## For LLM installers
+## For installers
 
-Before changing app code, the LLM should ask the user for any of these values that are not already obvious in the repo:
+Before changing app code, the installer should ask the user for any of these values that are not already obvious in the repo:
 
 - `shipyardBaseUrl`
 - `productSlug`
@@ -61,7 +61,7 @@ Before changing app code, the LLM should ask the user for any of these values th
 - whether to use the recommended Shipyard layout or adapt Announcements, Ask, and Roadmap to the app's existing design
 - permission to submit a test item
 
-The LLM may infer `platform` from Xcode project files or app sources, but it should tell the user what it found and ask for confirmation before calling setup complete.
+The installer may infer `platform` from Xcode project files or app sources, but it should tell the user what it found and ask for confirmation before calling setup complete.
 
 ## Clean up when done
 

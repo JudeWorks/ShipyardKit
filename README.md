@@ -6,7 +6,7 @@ It also exposes service-token APIs for native admin tools, including a Mac plann
 
 Current SDK version: `0.2.1`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
 
-Zip and hand off the top-level `ShipyardKit/` folder. That folder is the complete distributable package for a developer or coding LLM.
+Zip and hand off the top-level `ShipyardKit/` folder. That folder is the complete distributable package for a developer or installer.
 
 It ships three app-facing areas that fit well near Settings or About:
 
@@ -68,10 +68,10 @@ If they choose the recommended layout, use the three-entry Settings/About patter
 
 ## Package Contents
 
-- `LLM_SETUP_PROMPT.md`: canonical setup prompt for a coding LLM.
+- `INSTALL_PROMPT.md`: canonical setup prompt for automated installs.
 - `APPLE_TV_ROADMAP_PULL_SETUP.md`: tvOS setup path for a background daily Roadmap pull with no visible Announcements, Ask, Roadmap, or voting UI.
 - `VERSION` and `CHANGELOG.md`: SDK release number and release notes.
-- `SETUP_CHECKLIST.md`: pass/fail checklist for humans or LLMs.
+- `SETUP_CHECKLIST.md`: pass/fail checklist for manual or automated installs.
 - `env.example`: configuration values to map into the app.
 - `user-setup/shipyardkit-config.example.json`: starter config file for the values the installer must enter.
 - `user-setup/README.md`: where to find each value in Shipyard.
@@ -169,7 +169,7 @@ Before installing, collect:
 
 After the app is wired and verified, clean up the copied `ShipyardKit/` folder based on how the SDK is installed:
 
-- If Xcode uses `ShipyardKit/swift` as a local Swift package, keep `ShipyardKit/swift`, `VERSION`, and `CHANGELOG.md` in the repo. You may remove installer-only files such as `LLM_SETUP_PROMPT.md`, `SETUP_CHECKLIST.md`, `APPLE_TV_ROADMAP_PULL_SETUP.md`, `api-contracts/`, `security/`, and `user-setup/` after their instructions have been copied into project docs or completed.
+- If Xcode uses `ShipyardKit/swift` as a local Swift package, keep `ShipyardKit/swift`, `VERSION`, and `CHANGELOG.md` in the repo. You may remove installer-only files such as `INSTALL_PROMPT.md`, `SETUP_CHECKLIST.md`, `APPLE_TV_ROADMAP_PULL_SETUP.md`, `api-contracts/`, `security/`, and `user-setup/` after their instructions have been copied into project docs or completed.
 - If the app uses a remote Swift Package URL or the SDK has been moved into the app's own package structure, remove the copied top-level `ShipyardKit/` handoff folder after confirming Xcode no longer depends on that local path.
 - Do not leave temporary `shipyardkit-config.json` files, copied example config files, or one-off setup notes in the app bundle unless the app intentionally uses them at runtime.
 - Keep the real runtime config in the app's normal configuration system and keep the stable installation ID storage in app code.
@@ -268,11 +268,11 @@ For existing integrations, update `ShipyardKit/swift`, `VERSION`, and `CHANGELOG
 - Read `dailyRoadmapPullRows` and `dailyRoadmapInstallCount` in site/admin usage summaries when available.
 - Replace local references to `APPLE_TV_DAILY_ACTIVE_SETUP.md` with `APPLE_TV_ROADMAP_PULL_SETUP.md`.
 
-## LLM Setup
+## Installer Prompt
 
-Use `LLM_SETUP_PROMPT.md` exactly. The LLM should read this README first, then wire the package without adding static API keys.
+Use `INSTALL_PROMPT.md` exactly. The installer should read this README first, then wire the package without adding static API keys.
 
-Before the LLM installs anything, it should ask the user for:
+Before installation begins, confirm:
 
 - `shipyardBaseUrl` if it is not already present in app config or project docs
 - `productSlug` if it is not already present in app config or project docs
@@ -281,18 +281,18 @@ Before the LLM installs anything, it should ask the user for:
 - whether to use the recommended Shipyard layout or adapt Announcements, Ask, and Roadmap to the app's existing design
 - permission to submit one clearly labeled test item through the app
 
-The LLM may derive these from the codebase when obvious, but it should still ask the user to confirm before shipping:
+The installer may derive these from the codebase when obvious, but it should still ask the user to confirm before shipping:
 
 - `platform`
 - current app version source, usually `CFBundleShortVersionString`
 - current build number source, usually `CFBundleVersion`
 - when the app should refresh Engagement updates, for example app launch, foreground resume, or when the user opens Announcements or Ask
 
-If those values are missing and cannot be discovered safely, the LLM should stop and ask before editing app integration code.
+If those values are missing and cannot be discovered safely, installation should stop before editing app integration code.
 
 ## Install Order
 
-For both humans and LLMs, the recommended order is:
+For both manual and automated installs, the recommended order is:
 
 1. Read this `README.md`.
 2. Read `user-setup/README.md`.

@@ -1,6 +1,6 @@
 # ShipyardKit Setup Checklist
 
-Use this after integration to confirm ShipyardKit is ready for developer or LLM-assisted installation.
+Use this after integration to confirm ShipyardKit is ready for developer or automated installation.
 
 ## Package
 
