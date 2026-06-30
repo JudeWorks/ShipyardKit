@@ -1,0 +1,31 @@
+{
+  "companyName": "Acme Corp",
+  "productName": "Atlas",
+  "shipyardBaseUrl": "https://acme-studio.startshipyard.com",
+  "productSlug": "atlas",
+  "platform": "ios",
+  "whereToFindTheseValues": {
+    "shipyardBaseUrl": "Copy the origin from your Shipyard workspace URL.",
+    "productSlug": "Open the product in Shipyard and copy the slug from the product URL, for example /products/atlas.",
+    "platform": "Use ios, ipados, macos, tvos, watchos, or visionos.",
+    "productStatus": "ShipyardKit mobile sessions work for app products in any status; the product does not need to be live before testing."
+  },
+  "notes": {
+    "installationIdStrategy": "stable per-install UUID stored in Keychain or UserDefaults",
+    "appVersionSource": "CFBundleShortVersionString",
+    "buildNumberSource": "CFBundleVersion",
+    "shipyardKitVersionSource": "ShipyardClient.sdkVersion",
+    "dailyRoadmapPull": "Call client.pullRoadmapDaily() on launch and foreground resume. Use force: true only for user-initiated Roadmap opens or debug verification.",
+    "roadmapOpenRefresh": "When the user opens Roadmap, render cachedItems() immediately if available, then call pullRoadmapDaily(force: true) in the background and update the visible Roadmap if the fresh response differs.",
+    "roadmapPageFormat": "Roadmap should open as a page in Settings or the nearest equivalent app area. It should let users submit Feature or Bug Fix requests, list active public items in their current status, and use an actual tappable upvote button on each item.",
+    "roadmapVoteButtonStyle": "Style unvoted upvote buttons with a quieter/duller treatment from the app theme and voted upvote buttons with a stronger/bolder treatment from the app theme.",
+    "appleTVBackgroundPullOnly": "For tvOS background-pull-only apps, use platform tvos and wire only pullRoadmapDaily(); do not add visible Roadmap, Ask, Announcements, or voting UI.",
+    "shipyardAreas": ["Announcements", "Ask", "Roadmap"],
+    "roadmapSuggestionTypes": ["feature", "bugfix"],
+    "askTypes": ["single_choice", "multi_choice", "star_rating", "numeric_rating", "open_text"],
+    "displaySorting": "For roadmap lifecycle views, use fetchItems().shipyardGroupedByStatus() so statuses stay Open, Planned, In Progress, Shipped, Closed and items inside each group are ordered by vote count. For type views, use fetchItemCategories().",
+    "availabilityLabels": "Use item.availabilityLabel(currentAppVersion:) with CFBundleShortVersionString so releaseVersion can show Coming in, Update to get this, or Included in your version.",
+    "targetDateLabels": "Show item.targetDateLabel when present.",
+    "developerReplyLabels": "Show item.developerRespondedAtRelativeLabel() next to developer responses when present."
+  }
+}
