@@ -53,7 +53,7 @@ writeFileSync(clientPath, updatedClient)
 
 const changelog = readFileSync(changelogPath, 'utf8')
 const today = new Date().toISOString().slice(0, 10)
-const entry = `\n## ${next} - ${today}\n\n- TODO: Describe SDK changes.\n`
+const entry = `\n## ${next} - ${today}\n\n- Describe SDK changes.\n`
 const updatedChangelog = changelog.replace(/^# ShipyardKit Changelog\n/, `# ShipyardKit Changelog\n${entry}`)
 writeFileSync(changelogPath, updatedChangelog)
 

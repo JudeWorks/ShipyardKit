@@ -68,7 +68,7 @@ If they choose the recommended layout, use the three-entry Settings/About patter
 
 ## Package Contents
 
-- `INSTALL_PROMPT.md`: canonical setup prompt for automated installs.
+- `INSTALL_GUIDE.md`: canonical setup guide for automated installs.
 - `APPLE_TV_ROADMAP_PULL_SETUP.md`: tvOS setup path for a background daily Roadmap pull with no visible Announcements, Ask, Roadmap, or voting UI.
 - `VERSION` and `CHANGELOG.md`: SDK release number and release notes.
 - `SETUP_CHECKLIST.md`: pass/fail checklist for manual or automated installs.
@@ -169,7 +169,7 @@ Before installing, collect:
 
 After the app is wired and verified, clean up the copied `ShipyardKit/` folder based on how the SDK is installed:
 
-- If Xcode uses `ShipyardKit/swift` as a local Swift package, keep `ShipyardKit/swift`, `VERSION`, and `CHANGELOG.md` in the repo. You may remove installer-only files such as `INSTALL_PROMPT.md`, `SETUP_CHECKLIST.md`, `APPLE_TV_ROADMAP_PULL_SETUP.md`, `api-contracts/`, `security/`, and `user-setup/` after their instructions have been copied into project docs or completed.
+- If Xcode uses `ShipyardKit/swift` as a local Swift package, keep `ShipyardKit/swift`, `VERSION`, and `CHANGELOG.md` in the repo. You may remove installer-only files such as `INSTALL_GUIDE.md`, `SETUP_CHECKLIST.md`, `APPLE_TV_ROADMAP_PULL_SETUP.md`, `api-contracts/`, `security/`, and `user-setup/` after their instructions have been copied into project docs or completed.
 - If the app uses a remote Swift Package URL or the SDK has been moved into the app's own package structure, remove the copied top-level `ShipyardKit/` handoff folder after confirming Xcode no longer depends on that local path.
 - Do not leave temporary `shipyardkit-config.json` files, copied example config files, or one-off setup notes in the app bundle unless the app intentionally uses them at runtime.
 - Keep the real runtime config in the app's normal configuration system and keep the stable installation ID storage in app code.
@@ -268,9 +268,9 @@ For existing integrations, update `ShipyardKit/swift`, `VERSION`, and `CHANGELOG
 - Read `dailyRoadmapPullRows` and `dailyRoadmapInstallCount` in site/admin usage summaries when available.
 - Replace local references to `APPLE_TV_DAILY_ACTIVE_SETUP.md` with `APPLE_TV_ROADMAP_PULL_SETUP.md`.
 
-## Installer Prompt
+## Installer Guide
 
-Use `INSTALL_PROMPT.md` exactly. The installer should read this README first, then wire the package without adding static API keys.
+Use `INSTALL_GUIDE.md` exactly. The installer should read this README first, then wire the package without adding static API keys.
 
 Before installation begins, confirm:
 

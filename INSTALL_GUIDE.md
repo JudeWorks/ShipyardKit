@@ -1,6 +1,6 @@
-# ShipyardKit Install Prompt
+# ShipyardKit Install Guide
 
-Use this exact prompt with the installer after copying this `ShipyardKit/` folder into the target app repo:
+Use this guide after copying this `ShipyardKit/` folder into the target app repo:
 
 ```text
 Install and wire ShipyardKit in this Apple app project.

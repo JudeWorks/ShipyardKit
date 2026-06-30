@@ -4,7 +4,7 @@
 
 - Added `pullRoadmapDaily()` as the preferred Roadmap activity read, with `sessionReason: "roadmap_pull"` on the mobile session refresh.
 - Added `cachedItems()` so Roadmap views can render stored items immediately, then refresh in the background and update only when fresh data differs.
-- Updated setup docs, examples, API contracts, and the installer prompt to frame activity around daily Roadmap pulls instead of legacy app activity wording.
+- Updated setup docs, examples, API contracts, and the installer guide to frame activity around daily Roadmap pulls instead of legacy app activity wording.
 
 ### Upgrade from 0.2.0
 
