@@ -3,11 +3,10 @@
   "productName": "Atlas",
   "shipyardBaseUrl": "https://acme-studio.startshipyard.com",
   "productSlug": "atlas",
-  "platform": "ios",
   "whereToFindTheseValues": {
     "shipyardBaseUrl": "Copy the origin from your Shipyard workspace URL.",
     "productSlug": "Open the product in Shipyard and copy the slug from the product URL, for example /products/atlas.",
-    "platform": "Use ios, ipados, macos, tvos, watchos, or visionos.",
+    "platform": "ShipyardKit infers ios, ipados, macos, tvos, watchos, or visionos automatically unless app code overrides it.",
     "productStatus": "ShipyardKit mobile sessions work for app products in any status; the product does not need to be live before testing."
   },
   "notes": {
@@ -19,7 +18,7 @@
     "roadmapOpenRefresh": "When the user opens Roadmap, render cachedItems() immediately if available, then call pullRoadmapDaily(force: true) in the background and update the visible Roadmap if the fresh response differs.",
     "roadmapPageFormat": "Roadmap should open as a page in Settings or the nearest equivalent app area. It should let users submit Feature or Bug Fix requests, list active public items in their current status, and use an actual tappable upvote button on each item.",
     "roadmapVoteButtonStyle": "Style unvoted upvote buttons with a quieter/duller treatment from the app theme and voted upvote buttons with a stronger/bolder treatment from the app theme.",
-    "appleTVBackgroundPullOnly": "For tvOS background-pull-only apps, use platform tvos and wire only pullRoadmapDaily(); do not add visible Roadmap, Ask, Announcements, or voting UI.",
+    "appleTVBackgroundPullOnly": "For tvOS apps, wire only pullRoadmapDaily() by default; do not add visible Roadmap, Ask, Announcements, or voting UI unless admin instructions explicitly request it.",
     "shipyardAreas": ["Announcements", "Ask", "Roadmap"],
     "roadmapSuggestionTypes": ["feature", "bugfix"],
     "askTypes": ["single_choice", "multi_choice", "star_rating", "numeric_rating", "open_text"],

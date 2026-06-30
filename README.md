@@ -33,11 +33,7 @@ The Roadmap entry should open a Roadmap page within Settings or the nearest equi
 - include an actual upvote button on each item, not just a decorative count or icon
 - style the unvoted button with a quieter/duller treatment and the voted button with a stronger treatment using colors from the app's theme
 
-Before wiring UI, ask the app owner:
-
-> Do you want the recommended Shipyard layout, or should I adapt Announcements, Ask, and Roadmap to this app's existing design?
-
-If they choose the recommended layout, use the three-entry Settings/About pattern. If they choose a custom design, keep the same labels and behavior unless the app owner explicitly approves different wording.
+Use the three-entry Settings/About pattern by default, styled with the host app's existing list row, card, or settings-cell style. Keep the Announcements, Ask, and Roadmap labels and behavior unless the admin instructions explicitly request different wording.
 
 ## What ShipyardKit does
 
@@ -124,9 +120,7 @@ Before installing, collect:
 
 - `shipyardBaseUrl`
 - `productSlug`
-- target app `platform`
-- confirmation of where app config should live
-- whether to use the recommended Shipyard layout or a custom app-specific design
+- optional admin instructions from the generated ShipyardKit bundle
 - permission to submit one test item during setup
 
 1. Copy or unzip the top-level `ShipyardKit/` folder into the target app repo.
@@ -135,11 +129,11 @@ Before installing, collect:
 4. Add product `ShipyardKit` to the app target.
 5. `import ShipyardKit`.
 6. Create a stable per-install identifier using Keychain or persisted `UserDefaults`.
-7. Instantiate `ShipyardClient` with your Shipyard workspace URL, product slug, platform, and installation id provider.
+7. Instantiate `ShipyardClient` with your Shipyard workspace URL, product slug, and installation id provider. ShipyardKit infers the Apple platform automatically unless you explicitly override it.
    - ShipyardKit automatically includes app version (`CFBundleShortVersionString`) and build number (`CFBundleVersion`) in mobile session payloads unless you override providers.
    - ShipyardKit also sends `ShipyardClient.sdkVersion` as `shipyardKitVersion` and `X-ShipyardKit-Version`.
-8. Ask whether to use the recommended Shipyard layout or a custom app-specific design.
-9. Add the Shipyard area near Settings or About with three entries: Announcements, Ask, and Roadmap.
+8. Add the Shipyard area near Settings or About with three entries: Announcements, Ask, and Roadmap. Ask and Announcements should stay hidden unless Shipyard returns live content for the product.
+9. For Apple TV/tvOS apps, wire only `pullRoadmapDaily()` by default and do not add visible Shipyard UI unless the admin instructions explicitly request it.
 10. Roadmap suggestions are only for `Feature` and `Bug Fix`.
 11. Choose the roadmap layout:
     - Status roadmap: call `fetchItems().shipyardGroupedByStatus()` to show Open, Planned, In Progress, Shipped, and Closed groups. Items inside each group are sorted by upvotes.
@@ -276,19 +270,19 @@ Before installation begins, confirm:
 
 - `shipyardBaseUrl` if it is not already present in app config or project docs
 - `productSlug` if it is not already present in app config or project docs
-- confirmation of the correct app target if the repo contains more than one app target
-- confirmation of the config location if the repo has multiple config systems
-- whether to use the recommended Shipyard layout or adapt Announcements, Ask, and Roadmap to the app's existing design
+- any admin instructions included in the generated ShipyardKit bundle
+- confirmation of the correct app target only if the repo contains more than one plausible app target
+- confirmation of the config location only if the repo has multiple plausible config systems
 - permission to submit one clearly labeled test item through the app
 
-The installer may derive these from the codebase when obvious, but it should still ask the user to confirm before shipping:
+The installer should derive these from the codebase and report them before shipping:
 
 - `platform`
 - current app version source, usually `CFBundleShortVersionString`
 - current build number source, usually `CFBundleVersion`
 - when the app should refresh Engagement updates, for example app launch, foreground resume, or when the user opens Announcements or Ask
 
-If those values are missing and cannot be discovered safely, installation should stop before editing app integration code.
+If those values are ambiguous and cannot be discovered safely, installation should stop before editing app integration code.
 
 ## Install Order
 
@@ -299,9 +293,9 @@ For both manual and automated installs, the recommended order is:
 3. Fill or map values from `user-setup/shipyardkit-config.example.json`.
 4. Add `swift/` as a local Swift package.
 5. Wire `ShipyardClient`.
-6. Add the required mode:
-   - For daily Roadmap pull only, call `pullRoadmapDaily()` and stop there.
-   - For full apps, add Announcements, Ask, and Roadmap UI plus submission, fetch, and vote wiring.
+6. Add the standard ShipyardKit behavior:
+   - For Apple TV/tvOS, call `pullRoadmapDaily()` and stop unless admin instructions explicitly request visible UI.
+   - For other Apple apps, add Roadmap plus Announcements and Ask surfaces that stay hidden unless live content exists.
 7. Submit one test item when Roadmap submission is enabled.
 8. Run `SETUP_CHECKLIST.md`.
 
@@ -309,8 +303,7 @@ For both manual and automated installs, the recommended order is:
 
 - `shipyardBaseUrl`: open your Shipyard workspace in a browser and copy the origin, for example `https://acme-studio.startshipyard.com`.
 - `productSlug`: open the product in Shipyard and copy the slug from the product URL. For `https://acme-studio.startshipyard.com/products/atlas`, use `atlas`.
-- `platform`: use `ios`, `ipados`, `macos`, `tvos`, `watchos`, or `visionos`.
-  - If omitted in `ShipyardClient`, ShipyardKit infers it automatically from runtime/target.
+- `platform`: ShipyardKit infers this automatically from runtime/target unless app code explicitly overrides it.
 
 The example company is Acme Corp and the example product is Atlas. Replace every Acme/Atlas value before shipping.
 

@@ -38,10 +38,10 @@ Use this after integration to confirm ShipyardKit is ready for developer or auto
 
 ## App Layout
 
-- [ ] User was asked whether to use the recommended Shipyard layout or a custom app-specific design.
-- [ ] Full integration uses exactly three user-facing areas: Announcements, Ask, and Roadmap.
-- [ ] Recommended layout, if chosen, is one Shipyard section near Settings/About with three rows/cards/list entries.
-- [ ] Custom design, if chosen, preserves the Announcements, Ask, and Roadmap labels and behavior unless the user explicitly approved different wording.
+- [ ] Non-tvOS integration uses exactly three user-facing areas: Announcements, Ask, and Roadmap.
+- [ ] The app uses one Shipyard section near Settings/About with three rows/cards/list entries unless admin instructions explicitly requested a different location.
+- [ ] Ask and Announcements stay hidden unless Shipyard returns live content for the product.
+- [ ] Any custom presentation preserves the Announcements, Ask, and Roadmap labels and behavior unless admin instructions explicitly approved different wording.
 - [ ] Roadmap opens as a page inside Settings or the nearest equivalent app settings/about area.
 - [ ] Roadmap page includes both item submission and public item browsing.
 
@@ -58,7 +58,7 @@ Use this after integration to confirm ShipyardKit is ready for developer or auto
 ## Apple TV Roadmap Pull Only Flow
 
 - [ ] If this is a background-pull-only tvOS app, installer followed `APPLE_TV_ROADMAP_PULL_SETUP.md`.
-- [ ] tvOS config uses `platform: "tvos"`.
+- [ ] tvOS platform is inferred or explicitly set to `tvos`.
 - [ ] tvOS app has no visible Roadmap, Ask, Announcements, voting, inbox, or notification-style Shipyard UI.
 - [ ] tvOS app calls only `pullRoadmapDaily()` during normal runtime.
 - [ ] In tvOS background-pull-only mode, `force: true` is used only for debug verification and removed before shipping.

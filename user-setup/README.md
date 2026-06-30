@@ -8,10 +8,8 @@ Have these ready:
 
 - `shipyardBaseUrl`
 - `productSlug`
-- `platform`
-- the app target you want to modify
+- optional admin instructions from the generated ShipyardKit bundle
 - confirmation that the Shipyard product exists and app engagement is enabled
-- whether to use the recommended Shipyard layout or a custom app-specific design
 - permission to submit a test item during setup
 
 ## Fill these first
@@ -24,14 +22,12 @@ Have these ready:
 
 - `shipyardBaseUrl`
 - `productSlug`
-- `platform`
 
 ## Where to find them in Shipyard
 
 - `shipyardBaseUrl`: open the Shipyard workspace and copy the browser origin. Example: `https://acme-studio.startshipyard.com`.
 - `productSlug`: open the product in Shipyard and copy the slug from the URL. Example: `/products/atlas` means `atlas`.
-- `platform`: use the Apple platform string for the target app: `ios`, `ipados`, `macos`, `tvos`, `watchos`, or `visionos`.
-  If omitted in code, `ShipyardClient` can infer this automatically.
+- `platform`: ShipyardKit infers this automatically from the Apple runtime unless app code explicitly overrides it.
 
 The example values use Acme Corp as the company and Atlas as the product. Replace them before testing a real app.
 
@@ -56,12 +52,11 @@ Before changing app code, the installer should ask the user for any of these val
 
 - `shipyardBaseUrl`
 - `productSlug`
-- the correct app target
-- the correct config location
-- whether to use the recommended Shipyard layout or adapt Announcements, Ask, and Roadmap to the app's existing design
+- the correct app target only when the repo has multiple plausible app targets
+- the correct config location only when the repo has multiple plausible config systems
 - permission to submit a test item
 
-The installer may infer `platform` from Xcode project files or app sources, but it should tell the user what it found and ask for confirmation before calling setup complete.
+The installer should infer `platform` from Xcode project files or app sources and report what it found before calling setup complete.
 
 ## Clean up when done
 

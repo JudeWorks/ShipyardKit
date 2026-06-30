@@ -34,8 +34,8 @@ Before wiring the app, confirm the Shipyard product exists in the workspace and 
 6. When the user opens Roadmap, call `cachedItems()` first to render stored items immediately, then call `pullRoadmapDaily(force: true)` in the background and replace the visible groups if the fresh response changed.
 7. Call `fetchItems()` when you need an explicit public item read outside the daily/background pull flow.
 8. Use `shipyardGroupedByStatus()` on the items returned by `fetchItems()` or `pullRoadmapDaily(...)` for Open, Planned, In Progress, Shipped, and Closed sections sorted by upvotes inside each section.
-9. Ask whether to use the recommended Shipyard layout or adapt Announcements, Ask, and Roadmap to the app's existing design.
-10. Preferred build: add one Shipyard section near Settings/About with three entries: Announcements, Ask, and Roadmap.
+9. For Apple TV/tvOS apps, wire only `pullRoadmapDaily()` by default and do not add visible Shipyard UI unless admin instructions explicitly request it.
+10. Preferred build for other Apple apps: add one Shipyard section near Settings/About with three entries: Announcements, Ask, and Roadmap. Ask and Announcements should stay hidden unless Shipyard returns live content for the product.
 11. The Roadmap entry should open a Roadmap page in Settings or the nearest equivalent app area. It should let users submit Feature or Bug Fix requests, show active public items in their current status, and put a real tappable upvote button on each item.
 12. Style the upvote button from app theme colors: quieter/duller when the install has not voted on that item, stronger/bolder after the install has voted.
 13. Roadmap suggestions should only offer Feature and Bug Fix.

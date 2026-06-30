@@ -23,22 +23,17 @@ Follow these rules exactly:
 Required install inputs:
 - shipyardBaseUrl
 - productSlug
-- app target platform
-- install mode: `daily_roadmap_pull_only` or `full_engagement`
-- layout choice for `full_engagement`: `recommended_shipyard_layout` or `custom_app_design`
-- where integration config should live in this repo
-- permission to submit one labeled test item during setup
+- optional admin instructions from the generated ShipyardKit bundle
+- permission to submit one labeled test item during setup when verification is enabled
 
 Ask the user for these before installing if they are not already discoverable with high confidence:
 - shipyardBaseUrl
 - productSlug
-- install mode; recommend `daily_roadmap_pull_only` for Apple TV projects unless the user explicitly wants UI
-- layout choice when using `full_engagement`; ask: "Do you want the recommended Shipyard layout, or should I adapt Announcements, Ask, and Roadmap to this app's existing design?"
 - which app target to modify if there is more than one
 - which config file or config system should hold ShipyardKit values
-- permission to submit the final test item when `full_engagement` includes Roadmap submission
+- permission to submit the final test item when verification includes Roadmap submission
 
-If platform can be inferred from the repo, report the inferred value and ask the user to confirm it before shipping.
+Infer platform from the Xcode project or runtime target. Report the inferred value in the final summary. Ask the user only if the repository has multiple plausible app targets and the correct one is not obvious.
 If shipyardBaseUrl or productSlug are missing and cannot be found safely, stop and ask the user before wiring the package.
 
 Upgrade note for existing ShipyardKit 0.2.0 integrations:
@@ -57,11 +52,9 @@ Implementation requirements:
 - Configure `pullRoadmapDaily()` on app launch and foreground resume so each install performs one background Roadmap pull per UTC day.
 - `pullRoadmapDaily()` should be called freely from lifecycle hooks; the SDK suppresses duplicate successful Roadmap pulls for the same UTC day.
 - Use `force: true` only for deliberate user-initiated Roadmap opens or debug verification, not for passive lifecycle hooks.
-- For Apple TV projects using `daily_roadmap_pull_only`, read `APPLE_TV_ROADMAP_PULL_SETUP.md` and wire only `pullRoadmapDaily()`. Do not add visible Roadmap, Ask, Announcements, voting, inboxes, badges, or notification-style Shipyard UI.
-- In `daily_roadmap_pull_only` mode, skip the rest of the endpoint/UI requirements below except public-session and Roadmap pull verification.
-- In `full_engagement` mode, prefer one Shipyard section near Settings or About with exactly three areas: Announcements, Ask, and Roadmap.
-- If the user chooses `recommended_shipyard_layout`, format those areas as distinct rows, cards, or list entries using the host app's normal settings/about style.
-- If the user chooses `custom_app_design`, adapt the presentation to the app's existing design while preserving the exact area labels and behavior unless the user explicitly approves different wording.
+- For Apple TV/tvOS projects, read `APPLE_TV_ROADMAP_PULL_SETUP.md` and wire only `pullRoadmapDaily()` by default. Do not add visible Roadmap, Ask, Announcements, voting, inboxes, badges, or notification-style Shipyard UI unless the admin instructions explicitly request visible UI.
+- For other Apple app targets, install Roadmap and add Ask and Announcements support. Ask and Announcements should stay hidden unless Shipyard returns live content for the product.
+- Prefer one Shipyard section near Settings or About with exactly three areas: Announcements, Ask, and Roadmap. Adapt the presentation to the app's existing design while preserving those labels and behavior unless the admin instructions explicitly request different wording.
 - Use the scoped token for:
   - GET /v1/engagement/updates
   - GET /v1/engagement/asks
@@ -72,7 +65,7 @@ Implementation requirements:
   - POST /v1/requests
   - POST /v1/requests/:id/vote
 - Roadmap is only for suggestions. Let users choose only Feature or Bug Fix.
-- Expected Roadmap format for full engagement installs: a Roadmap page inside Settings or the nearest equivalent app settings/about area.
+- Expected Roadmap format: a Roadmap page inside Settings or the nearest equivalent app settings/about area.
 - The Roadmap page must let users submit a Feature or Bug Fix request.
 - The Roadmap page must show active public roadmap items in their current status. Prefer status grouping in lifecycle order: Open, Planned, In Progress, Shipped; include Closed only when the app owner wants historical closed items shown.
 - Each roadmap item must have an actual tappable upvote button. Do not make the vote count or icon merely decorative.
@@ -89,7 +82,7 @@ Implementation requirements:
 - Submit Ask answers with the matching `respondToAsk(...)` overload.
 - If the app renders announcements, only call markAnnouncementShown(...) after the announcement is actually visible on screen.
 - If the app supports dismissal or CTA taps, wire dismissAnnouncement(...) and clickAnnouncement(...).
-- Ask the user whether the Roadmap should be grouped by status or by Feature/Bug Fix type when the app does not already have a clear pattern.
+- Prefer status grouping for Roadmap unless the app already has a clearer Feature/Bug Fix section pattern.
 - When the user opens Roadmap, render `cachedItems()` immediately if cached items exist, then call `pullRoadmapDaily(force: true)` in the background and update the displayed Roadmap if the fresh response differs.
 - For status grouping, use fetchItems().shipyardGroupedByStatus() so sections stay in lifecycle order: Open, Planned, In Progress, Shipped, Closed. Items inside each status must be sorted by vote count.
 - For type grouping, use fetchItemCategories() so planner item-type categories are sorted by total votes and items inside each category are sorted by vote count.
@@ -111,7 +104,7 @@ Implementation requirements:
 Deliverables:
 - list of files changed
 - list of user-provided values and list of inferred values
-- install mode used and why
+- standard install behavior used, including any tvOS daily-pull-only handling
 - summary of where ShipyardClient is configured
 - summary of where the daily Roadmap pull is called, and confirmation it uses normal once-per-day mode in production
 - summary of how token refresh is handled
