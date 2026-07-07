@@ -50,6 +50,8 @@ Implementation requirements:
 - Verify the target Shipyard product exists in the workspace and is an app product. Product status does not block ShipyardKit mobile sessions.
 - Let ShipyardKit mint short-lived tokens through POST /v1/auth/mobile/public-session.
 - Configure `pullRoadmapDaily()` on app launch and foreground resume so each install performs one background Roadmap pull per UTC day.
+- Use `ShipyardInstallationIdentifier.stable()` for `installationIdProvider` — it persists the id in the Keychain so reinstalls keep the same device identity.
+- Offline launches are safe: if the daily pull fails with a connectivity error, the SDK queues the check-in with its UTC day and delivers it automatically on the next connection (`ShipyardError.offlineQueued` is thrown so callers can ignore it with `try?`).
 - `pullRoadmapDaily()` should be called freely from lifecycle hooks; the SDK suppresses duplicate successful Roadmap pulls for the same UTC day.
 - Use `force: true` only for deliberate user-initiated Roadmap opens or debug verification, not for passive lifecycle hooks.
 - For Apple TV/tvOS projects, read `APPLE_TV_ROADMAP_PULL_SETUP.md` and wire only `pullRoadmapDaily()` by default. Do not add visible Roadmap, Ask, Announcements, voting, inboxes, badges, or notification-style Shipyard UI unless the admin instructions explicitly request visible UI.

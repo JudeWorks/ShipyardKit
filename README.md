@@ -179,7 +179,7 @@ let client = ShipyardClient(
     baseURL: URL(string: "https://acme-studio.startshipyard.com")!,
     productSlug: "atlas-tv",
     platform: "tvos",
-    installationIdProvider: { stableInstallationId() }
+    installationIdProvider: { ShipyardInstallationIdentifier.stable() }
 )
 
 Task {
@@ -315,7 +315,7 @@ import ShipyardKit
 let client = ShipyardClient(
     baseURL: URL(string: "https://acme-studio.startshipyard.com")!,
     productSlug: "atlas",
-    installationIdProvider: { stableInstallationId() }
+    installationIdProvider: { ShipyardInstallationIdentifier.stable() }
 )
 
 _ = try await client.pullRoadmapDaily()

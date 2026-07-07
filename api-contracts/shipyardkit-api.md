@@ -13,8 +13,9 @@
   "platform": "ios",
   "appVersion": "1.0.2",
   "buildNumber": "102",
-  "shipyardKitVersion": "0.2.1",
-  "sessionReason": "roadmap_pull"
+  "shipyardKitVersion": "0.2.2",
+  "sessionReason": "roadmap_pull",
+  "activityDate": "2026-05-13"
 }
 ```
 
@@ -36,14 +37,16 @@
     "platform": "ios",
     "appVersion": "1.0.2",
     "buildNumber": "102",
-    "shipyardKitVersion": "0.2.1"
+    "shipyardKitVersion": "0.2.2"
   }
 }
 ```
 
-ShipyardKit also sends `X-ShipyardKit-Version: 0.2.1` on SDK requests.
+ShipyardKit also sends `X-ShipyardKit-Version: 0.2.2` on SDK requests.
 
 `pullRoadmapDaily()` maps to this endpoint and then reads `GET /v1/requests`. The SDK sends `sessionReason: "roadmap_pull"` when it refreshes the mobile session for that daily read. Shipyard records one app/platform/version activity row per UTC day per install, so the site can show which apps are using the Roadmap pull without presenting it as a separate outbound signal.
+
+`activityDate` (optional, `YYYY-MM-DD`, UTC) lets a device deliver a check-in late — for example when the only app open of a day happened offline and the SDK queued it. The server accepts dates up to 2 days in the past; anything missing, invalid, in the future, or older falls back to the server’s current UTC day. The daily activity row is recorded once per install per UTC day regardless (`pullCount` on that row counts session refreshes for the day, not roadmap fetches).
 
 The target product must be an app product, but it does not need to be live. ShipyardKit mobile sessions work for app products in any product status.
 

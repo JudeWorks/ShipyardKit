@@ -1,5 +1,20 @@
 # ShipyardKit Changelog
 
+## 0.2.2 — 2026-07-06
+
+- Daily check-in reliability: the session call now retries once with a short
+  jittered delay on transient failures (connectivity, 408/425/429/5xx).
+- Offline check-ins are no longer lost: when the only app open of the day
+  happens offline, the check-in is queued with its UTC day and delivered on
+  the next connection (`activityDate`, accepted by the server up to 2 days
+  late).
+- New `ShipyardInstallationIdentifier.stable()` Keychain-backed install id
+  helper (with UserDefaults migration + fallback) so reinstalls do not mint
+  a new "device". The README and example now use it.
+- Note: `pullCount` on daily activity rows counts session refreshes for the
+  day, not roadmap fetches.
+
+
 ## 0.2.1 - 2026-06-27
 
 - Added `pullRoadmapDaily()` as the preferred Roadmap activity read, with `sessionReason: "roadmap_pull"` on the mobile session refresh.

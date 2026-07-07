@@ -1,0 +1,22 @@
+name: Swift Tests
+
+on:
+  push:
+    paths:
+      - 'swift/**'
+      - '.github/workflows/swift-tests.yml'
+  pull_request:
+    paths:
+      - 'swift/**'
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        working-directory: swift
+        run: swift build
+      - name: Test
+        working-directory: swift
+        run: swift test

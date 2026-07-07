@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import CryptoKit
 import Network
 #if canImport(UIKit)
@@ -1785,8 +1786,66 @@ private final class ShipyardConnectivityMonitor: @unchecked Sendable {
     }
 }
 
+/// Stable per-install identifier persisted in the Keychain so it survives
+/// app reinstalls and OS restores that keep the keychain. Falls back to a
+/// UserDefaults-persisted UUID when the Keychain is unavailable. Using this
+/// keeps "active device" counts honest: a reinstall does not mint a new
+/// device.
+public enum ShipyardInstallationIdentifier {
+    public static func stable(
+        service: String = "ShipyardKit",
+        account: String = "installation-id",
+        userDefaults: UserDefaults = .standard
+    ) -> String {
+        let defaultsKey = "shipyardkit_installation_id"
+        if let existing = readKeychain(service: service, account: account), !existing.isEmpty {
+            return existing
+        }
+        if let fallback = userDefaults.string(forKey: defaultsKey), !fallback.isEmpty {
+            // Migrate a pre-Keychain id forward so the device identity is kept.
+            _ = writeKeychain(service: service, account: account, value: fallback)
+            return fallback
+        }
+        let generated = UUID().uuidString
+        if !writeKeychain(service: service, account: account, value: generated) {
+            userDefaults.set(generated, forKey: defaultsKey)
+        }
+        return generated
+    }
+
+    private static func readKeychain(service: String, account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data,
+              let value = String(data: data, encoding: .utf8)
+        else { return nil }
+        return value
+    }
+
+    private static func writeKeychain(service: String, account: String, value: String) -> Bool {
+        guard let data = value.data(using: .utf8) else { return false }
+        let baseQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(baseQuery as CFDictionary)
+        var addQuery = baseQuery
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
+    }
+}
+
 public final class ShipyardClient: @unchecked Sendable {
-    public static let sdkVersion = "0.2.1"
+    public static let sdkVersion = "0.2.2"
     public static let engagementReadCacheTTL: TimeInterval = 15 * 60
 
     public let baseURL: URL
@@ -2697,7 +2756,20 @@ public final class ShipyardClient: @unchecked Sendable {
             return nil
         }
 
-        _ = try await refreshSession(reason: "roadmap_pull")
+        do {
+            _ = try await refreshSession(reason: "roadmap_pull")
+        } catch {
+            // Offline at the only open of the day: queue the check-in with
+            // the day it actually happened. The server accepts a bounded
+            // activityDate so the device-day is recorded once connectivity
+            // returns instead of being lost.
+            if Self.isConnectivityError(error) {
+                await enqueueOfflineDailyCheckIn(dayKey: dayKey, reason: "roadmap_pull")
+                userDefaults.set(dayKey, forKey: defaultsKey)
+                throw ShipyardError.offlineQueued
+            }
+            throw error
+        }
         userDefaults.set(dayKey, forKey: defaultsKey)
         return try await fetchItems(status: status)
     }
@@ -2734,6 +2806,34 @@ public final class ShipyardClient: @unchecked Sendable {
             calendar: calendar,
             userDefaults: userDefaults,
             force: force
+        )
+    }
+
+    private func enqueueOfflineDailyCheckIn(dayKey: String, reason: String) async {
+        let installationId = installationIdProvider().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !installationId.isEmpty else { return }
+        var body: [String: String] = [
+            "productSlug": productSlug,
+            "installationId": installationId,
+            "platform": platform,
+            "shipyardKitVersion": Self.sdkVersion,
+            "sessionReason": reason,
+            "activityDate": dayKey
+        ]
+        if let appVersion = appVersionProvider(), !appVersion.isEmpty {
+            body["appVersion"] = appVersion
+        }
+        if let buildNumber = buildNumberProvider(), !buildNumber.isEmpty {
+            body["buildNumber"] = buildNumber
+        }
+        guard let data = try? encoder.encode(body) else { return }
+        await offlineWriteQueue.enqueue(
+            scope: offlineScope,
+            path: "v1/auth/mobile/public-session",
+            method: "POST",
+            queryItems: [],
+            body: data,
+            contentType: "application/json"
         )
     }
 
@@ -2774,8 +2874,22 @@ public final class ShipyardClient: @unchecked Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         applySDKHeaders(to: &request)
 
-        let (responseData, response) = try await urlSession.data(for: request)
-        try validateStatus(data: responseData, response: response)
+        // One retry with a short jittered delay for transient failures: this
+        // call carries the daily check-in, so a flaky launch-time network
+        // should not cost a device-day.
+        var responseData: Data
+        do {
+            let (firstData, firstResponse) = try await urlSession.data(for: request)
+            try validateStatus(data: firstData, response: firstResponse)
+            responseData = firstData
+        } catch {
+            guard Self.isTransientSessionError(error) else { throw error }
+            let jitterNanos = UInt64.random(in: 0...400_000_000)
+            try? await Task.sleep(nanoseconds: 600_000_000 + jitterNanos)
+            let (retryData, retryResponse) = try await urlSession.data(for: request)
+            try validateStatus(data: retryData, response: retryResponse)
+            responseData = retryData
+        }
         let decoded: SessionResponse
         do {
             decoded = try decoder.decode(SessionResponse.self, from: responseData)
@@ -2994,6 +3108,14 @@ public final class ShipyardClient: @unchecked Sendable {
             return false
         }
         return status == 401 || status == 403
+    }
+
+    fileprivate static func isTransientSessionError(_ error: Error) -> Bool {
+        if isConnectivityError(error) {
+            return true
+        }
+        guard case ShipyardError.server(_, let status) = error else { return false }
+        return status == 408 || status == 425 || status == 429 || status >= 500
     }
 
     fileprivate static func isConnectivityError(_ error: Error) -> Bool {
