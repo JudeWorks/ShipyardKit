@@ -1916,8 +1916,9 @@ public final class ShipyardClient: @unchecked Sendable {
         self.urlSession = urlSession
         self.connectivityMonitor = nil
         self.connectivityMonitor = ShipyardConnectivityMonitor { [weak self] in
+            guard let client = self else { return }
             Task {
-                await self?.syncQueuedWritesIfPossible()
+                await client.syncQueuedWritesIfPossible()
             }
         }
     }
