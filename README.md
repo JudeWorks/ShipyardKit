@@ -4,7 +4,7 @@ ShipyardKit is the Swift package and setup bundle for adding Shipyard-powered an
 
 It also exposes service-token APIs for native admin tools, including a Mac planner surface that can list products, load release-grouped planner items, update working versions, manage internal planner items, and edit planning tasks.
 
-Current SDK version: `0.2.1`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
+Current SDK version: `0.2.3`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
 
 Zip and hand off the top-level `ShipyardKit/` folder. That folder is the complete distributable package for a developer or installer.
 
@@ -18,13 +18,13 @@ The API is intentionally named around generic `items` because Shipyard will supp
 
 ## Preferred App Layout
 
-The preferred build is one Shipyard section near Settings or About with three clearly labeled entries:
+The preferred build is one Support section near Settings or About with three separate rows:
 
+- Roadmap
 - Announcements
 - Ask
-- Roadmap
 
-Use the host app's normal list row, card, or settings-cell style. Each entry should open a dedicated surface for that function, and Roadmap submission should only offer Feature and Bug Fix.
+Roadmap is always visible. Show Announcements only while Shipyard returns a current announcement, and show Ask only while Shipyard returns a current displayable Ask item. Do not render empty or disabled rows. Use the host app's normal list row, card, or settings-cell style. Each visible row should open a dedicated surface, and Roadmap submission should only offer Feature and Bug Fix.
 
 The Roadmap entry should open a Roadmap page within Settings or the nearest equivalent app area. That page should:
 
@@ -33,12 +33,12 @@ The Roadmap entry should open a Roadmap page within Settings or the nearest equi
 - include an actual upvote button on each item, not just a decorative count or icon
 - style the unvoted button with a quieter/duller treatment and the voted button with a stronger treatment using colors from the app's theme
 
-Use the three-entry Settings/About pattern by default, styled with the host app's existing list row, card, or settings-cell style. Keep the Announcements, Ask, and Roadmap labels and behavior unless the admin instructions explicitly request different wording.
+Use the three-row Support pattern by default, styled with the host app's existing list row, card, or settings-cell style. Other Support features remain owned by the host app.
 
 ## What ShipyardKit does
 
 - Mints short-lived, scoped end-user tokens from Shipyard.
-- Runs one daily Roadmap pull per installed app/device when the app calls `pullRoadmapDaily()`, so Shipyard can show which apps, platforms, app versions, and SDK versions are using the Roadmap integration.
+- Coordinates one successful Roadmap, Engagement, queued-write, and check-in cycle per UTC day when the app calls `syncDaily()`, so Shipyard can show which apps, platforms, app versions, and SDK versions use the integration.
 - Submits roadmap suggestions as `waiting_review` so admins can moderate before publishing.
 - Lets users submit roadmap suggestions as `feature` or `bugfix`.
 - Reads cached public Roadmap items for immediate display and refreshes them in the background when users open Roadmap.
@@ -132,15 +132,15 @@ Before installing, collect:
 7. Instantiate `ShipyardClient` with your Shipyard workspace URL, product slug, and installation id provider. ShipyardKit infers the Apple platform automatically unless you explicitly override it.
    - ShipyardKit automatically includes app version (`CFBundleShortVersionString`) and build number (`CFBundleVersion`) in mobile session payloads unless you override providers.
    - ShipyardKit also sends `ShipyardClient.sdkVersion` as `shipyardKitVersion` and `X-ShipyardKit-Version`.
-8. Add the Shipyard area near Settings or About with three entries: Announcements, Ask, and Roadmap. Ask and Announcements should stay hidden unless Shipyard returns live content for the product.
+8. Add three separate ShipyardKit rows under Support: Roadmap, Announcements, and Ask. Roadmap is always visible. Announcements and Ask stay hidden unless Shipyard returns current displayable content for that row. Other Support features remain app-owned.
 9. For Apple TV/tvOS apps, wire only `pullRoadmapDaily()` by default and do not add visible Shipyard UI unless the admin instructions explicitly request it.
 10. Roadmap suggestions are only for `Feature` and `Bug Fix`.
 11. Choose the roadmap layout:
     - Status roadmap: call `fetchItems().shipyardGroupedByStatus()` to show Open, Planned, In Progress, Shipped, and Closed groups. Items inside each group are sorted by upvotes.
     - Type sections: call `fetchItemCategories()` only if the app specifically wants Feature and Bug Fix sections.
-12. Call `pullRoadmapDaily()` on app launch and foreground resume. This performs a background Roadmap read at most once per UTC day per install and lets Shipyard report which apps are using the Roadmap pull without extra UI. When the user opens Roadmap, render `cachedItems()` immediately when available, then call `pullRoadmapDaily(force: true)` in the background and update the visible groups if the fresh response changed.
-13. Refresh Engagement data on app launch and foreground resume when the app uses Announcements or Ask. ShipyardKit caches engagement reads for 15 minutes by default, so repeated lifecycle calls do not hammer the API.
-14. Call `fetchEngagementUpdates()` to load current Ask items and Announcements in one request; use `cachePolicy: .reloadIgnoringCache` only for deliberate user-initiated refreshes.
+12. Call `syncDaily()` from app launch and foreground resume. It coordinates queued writes, the Roadmap pull/daily check-in, and the Announcements/Ask Engagement pull at most once per UTC calendar day. Failed content reads remain incomplete so a later lifecycle event that day can retry without duplicating the check-in.
+13. When the user opens Roadmap, render `cachedItems()` immediately and call normal `pullRoadmapDaily()` in the background. Do not use `force: true` for ordinary opens; same-day calls return without another pull or check-in.
+14. Use the `engagementUpdates` returned by `syncDaily()` or `cachedEngagementUpdates()` to decide whether the conditional Announcements and Ask rows should be visible.
 15. If the app shows Ask UI, branch on `ask.type` and support every current type:
     - `.singleChoice`: submit one option id.
     - `.multiChoice`: submit selected option ids and honor `maxSelections` when present.
@@ -252,12 +252,19 @@ _ = try await client.createPlannerTask(
 )
 ```
 
+## Upgrade From 0.2.2 To 0.2.3
+
+- Replace passive lifecycle calls to `pullRoadmapDaily()`, `fetchEngagementUpdates()`, or `refreshCachedDataAndSyncQueuedWrites()` with one `syncDaily()` call on launch and foreground resume.
+- Move the three ShipyardKit rows under Support. Keep Roadmap visible; render Announcements and Ask only when their current content exists.
+- Remove ordinary `force: true` Roadmap opens. Render cached content first and use normal `pullRoadmapDaily()` for the once-daily network read.
+- Leave all other Support features to the host app.
+
 ## Upgrade From 0.2.0 To 0.2.1
 
 For existing integrations, update `ShipyardKit/swift`, `VERSION`, and `CHANGELOG.md`, then make these migration edits:
 
-- Replace deprecated lifecycle calls such as `pingDailyActiveDevice()` or `checkInDailyActiveDevice()` with `pullRoadmapDaily()` on launch and foreground resume.
-- Update visible Roadmap screens to render `cachedItems()` first, then run `pullRoadmapDaily(force: true)` in the background and refresh the visible groups only when the response changes.
+- Replace deprecated lifecycle calls and repeated Engagement refreshes with `syncDaily()` on launch and foreground resume.
+- Update visible Roadmap screens to render `cachedItems()` first, then run normal `pullRoadmapDaily()` and refresh the visible groups only when it returns fresh content.
 - Prefer `fetchAsks()` and `respondToAsk(...)` for Ask UI.
 - Read `dailyRoadmapPullRows` and `dailyRoadmapInstallCount` in site/admin usage summaries when available.
 - Replace local references to `APPLE_TV_DAILY_ACTIVE_SETUP.md` with `APPLE_TV_ROADMAP_PULL_SETUP.md`.
@@ -295,7 +302,7 @@ For both manual and automated installs, the recommended order is:
 5. Wire `ShipyardClient`.
 6. Add the standard ShipyardKit behavior:
    - For Apple TV/tvOS, call `pullRoadmapDaily()` and stop unless admin instructions explicitly request visible UI.
-   - For other Apple apps, add Roadmap plus Announcements and Ask surfaces that stay hidden unless live content exists.
+   - For other Apple apps, add three separate rows under Support: Roadmap is always visible; Announcements and Ask stay hidden unless current content exists.
 7. Submit one test item when Roadmap submission is enabled.
 8. Run `SETUP_CHECKLIST.md`.
 
@@ -318,22 +325,22 @@ let client = ShipyardClient(
     installationIdProvider: { ShipyardInstallationIdentifier.stable() }
 )
 
-_ = try await client.pullRoadmapDaily()
+let daily = await client.syncDaily()
 let items = try await client.fetchItems()
 let cachedItems = await client.cachedItems()
 let categories = try await client.fetchItemCategories()
 let statusGroups = items.shipyardGroupedByStatus()
-let updates = try await client.fetchEngagementUpdates()
+let updates = daily.engagementUpdates
 let availability = items.first?.availabilityLabel(currentAppVersion: "1.0.2")
 let target = items.first?.targetDateLabel
 let replyTime = items.first?.developerRespondedAtRelativeLabel()
-let askType = updates.asks.first?.type
+let askType = updates?.asks.first?.type
 let created = try await client.submitItem(
     title: "Add compact dashboard widgets",
     description: "Useful on smaller phones.",
     itemType: .feature
 )
-if let ask = updates.asks.first {
+if let updates, let ask = updates.asks.first {
     switch ask.type {
     case .singleChoice:
         if let option = ask.options.first {
@@ -349,7 +356,7 @@ if let ask = updates.asks.first {
         break
     }
 }
-if let announcement = updates.announcements.first {
+if let updates, let announcement = updates.announcements.first {
     _ = try await client.markAnnouncementShown(
         announcementId: announcement.id,
         visibleMs: 1200,

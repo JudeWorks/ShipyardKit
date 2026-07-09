@@ -632,6 +632,11 @@ final class ShipyardKitTests: XCTestCase {
             date: Date(timeIntervalSince1970: 1_779_814_800),
             userDefaults: defaults
         )
+        let forced = try await client.pullRoadmapDaily(
+            date: Date(timeIntervalSince1970: 1_779_814_800),
+            userDefaults: defaults,
+            force: true
+        )
         let nextDay = try await client.pullRoadmapDaily(
             date: Date(timeIntervalSince1970: 1_779_897_600),
             userDefaults: defaults
@@ -639,9 +644,144 @@ final class ShipyardKitTests: XCTestCase {
 
         XCTAssertEqual(first?.map(\.id), ["req_daily"])
         XCTAssertNil(second)
+        XCTAssertEqual(forced?.map(\.id), ["req_daily"])
         XCTAssertEqual(nextDay?.map(\.id), ["req_daily"])
         XCTAssertEqual(sessionRequestCount, 2)
-        XCTAssertEqual(roadmapRequestCount, 2)
+        XCTAssertEqual(roadmapRequestCount, 3)
+    }
+
+    func testDailySyncPullsRoadmapAndEngagementOnceAndRetriesFailedContent() async throws {
+        let productSlug = "daily-sync-\(UUID().uuidString)"
+        let client = makeMockClient(productSlug: productSlug)
+        await client.clearOfflineData()
+        let suiteName = "ShipyardKitTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let date = Date(timeIntervalSince1970: 1_779_811_200)
+        var sessionRequestCount = 0
+        var roadmapRequestCount = 0
+        var engagementRequestCount = 0
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            switch request.url?.path {
+            case "/v1/auth/mobile/public-session":
+                sessionRequestCount += 1
+                let body = try Self.requestJSONBody(request)
+                XCTAssertEqual(body["productSlug"] as? String, productSlug)
+                XCTAssertEqual(body["installationId"] as? String, "test-installation-\(productSlug)")
+                XCTAssertEqual(body["platform"] as? String, ShipyardClient.inferredPlatform())
+                XCTAssertEqual(body["appVersion"] as? String, "1.0")
+                XCTAssertEqual(body["buildNumber"] as? String, "1")
+                XCTAssertEqual(body["shipyardKitVersion"] as? String, ShipyardClient.sdkVersion)
+                XCTAssertEqual(body["sessionReason"] as? String, "roadmap_pull")
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 201,
+                    body: #"{"token":"test-token","expiresAt":"2099-01-01T00:00:00Z"}"#
+                )
+            case "/v1/requests":
+                roadmapRequestCount += 1
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 200,
+                    body: #"{"requests":[{"id":"req_daily_sync","title":"Daily sync","description":null,"status":"open","itemType":"feature","voteCount":2}]}"#
+                )
+            case "/v1/engagement/updates":
+                engagementRequestCount += 1
+                if engagementRequestCount == 1 {
+                    throw URLError(.notConnectedToInternet)
+                }
+                let ask = Self.promptObject(id: "ask_daily_sync", promptType: "open_text")
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 200,
+                    jsonObject: [
+                        "asks": [ask],
+                        "prompts": [ask],
+                        "announcements": [],
+                        "refreshedAt": "2026-05-28T20:30:00.000Z"
+                    ]
+                )
+            default:
+                return try Self.jsonResponse(for: request, status: 404, body: #"{"error":"not found"}"#)
+            }
+        }
+
+        let first = await client.syncDaily(date: date, userDefaults: defaults)
+        let retry = await client.syncDaily(date: date, userDefaults: defaults)
+        let repeated = await client.syncDaily(date: date, userDefaults: defaults)
+
+        XCTAssertFalse(first.isComplete)
+        XCTAssertEqual(first.roadmapItems?.map(\.id), ["req_daily_sync"])
+        XCTAssertTrue(retry.isComplete)
+        XCTAssertEqual(retry.engagementUpdates?.asks.map(\.id), ["ask_daily_sync"])
+        XCTAssertTrue(repeated.isComplete)
+        XCTAssertEqual(repeated.engagementUpdates?.asks.map(\.id), ["ask_daily_sync"])
+        XCTAssertEqual(sessionRequestCount, 1)
+        XCTAssertEqual(roadmapRequestCount, 1)
+        XCTAssertEqual(engagementRequestCount, 2)
+    }
+
+    func testOfflineDailySyncRetriesContentWithoutDuplicatingRoadmapCheckIn() async throws {
+        let productSlug = "offline-daily-sync-\(UUID().uuidString)"
+        let client = makeMockClient(productSlug: productSlug)
+        await client.clearOfflineData()
+        let suiteName = "ShipyardKitTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let date = Date(timeIntervalSince1970: 1_779_811_200)
+        var isOnline = false
+        var roadmapCheckInCount = 0
+        var sessionWithoutReasonCount = 0
+        var roadmapRequestCount = 0
+        var engagementRequestCount = 0
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            guard isOnline else { throw URLError(.notConnectedToInternet) }
+            switch request.url?.path {
+            case "/v1/auth/mobile/public-session":
+                let body = try Self.requestJSONBody(request)
+                if body["sessionReason"] as? String == "roadmap_pull" {
+                    roadmapCheckInCount += 1
+                    XCTAssertNotNil(body["activityDate"] as? String)
+                } else {
+                    sessionWithoutReasonCount += 1
+                }
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 201,
+                    body: #"{"token":"test-token","expiresAt":"2099-01-01T00:00:00Z"}"#
+                )
+            case "/v1/requests":
+                roadmapRequestCount += 1
+                return try Self.jsonResponse(for: request, status: 200, body: #"{"requests":[]}"#)
+            case "/v1/engagement/updates":
+                engagementRequestCount += 1
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 200,
+                    body: #"{"asks":[],"prompts":[],"announcements":[],"refreshedAt":"2026-05-28T20:30:00.000Z"}"#
+                )
+            default:
+                return try Self.jsonResponse(for: request, status: 404, body: #"{"error":"not found"}"#)
+            }
+        }
+
+        let offline = await client.syncDaily(date: date, userDefaults: defaults)
+        let queuedWhileOffline = await client.queuedWriteCount()
+        XCTAssertFalse(offline.isComplete)
+        XCTAssertEqual(queuedWhileOffline, 1)
+
+        isOnline = true
+        let recovered = await client.syncDaily(date: date, userDefaults: defaults)
+        let queuedAfterRecovery = await client.queuedWriteCount()
+
+        XCTAssertTrue(recovered.isComplete)
+        XCTAssertEqual(queuedAfterRecovery, 0)
+        XCTAssertEqual(roadmapCheckInCount, 1)
+        XCTAssertEqual(sessionWithoutReasonCount, 1)
+        XCTAssertEqual(roadmapRequestCount, 1)
+        XCTAssertEqual(engagementRequestCount, 1)
     }
 
     func testFetchAsksUsesAskEndpointAndDecodesAskPayload() async throws {

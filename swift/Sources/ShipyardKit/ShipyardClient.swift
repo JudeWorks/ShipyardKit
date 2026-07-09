@@ -1405,6 +1405,25 @@ public struct ShipyardOfflineSyncResult: Sendable {
     }
 }
 
+public struct ShipyardDailySyncResult: Sendable {
+    public let roadmapItems: [ShipyardItem]?
+    public let engagementUpdates: ShipyardEngagementUpdates?
+    public let offlineWrites: ShipyardOfflineSyncResult
+    public let isComplete: Bool
+
+    public init(
+        roadmapItems: [ShipyardItem]?,
+        engagementUpdates: ShipyardEngagementUpdates?,
+        offlineWrites: ShipyardOfflineSyncResult,
+        isComplete: Bool
+    ) {
+        self.roadmapItems = roadmapItems
+        self.engagementUpdates = engagementUpdates
+        self.offlineWrites = offlineWrites
+        self.isComplete = isComplete
+    }
+}
+
 private struct SessionResponse: Codable {
     let token: String
     let expiresAt: String
@@ -1845,7 +1864,7 @@ public enum ShipyardInstallationIdentifier {
 }
 
 public final class ShipyardClient: @unchecked Sendable {
-    public static let sdkVersion = "0.2.2"
+    public static let sdkVersion = "0.2.3"
     public static let engagementReadCacheTTL: TimeInterval = 15 * 60
 
     public let baseURL: URL
@@ -1946,6 +1965,32 @@ public final class ShipyardClient: @unchecked Sendable {
         let key = cacheKey(path: "v1/requests", queryItems: queryItems)
         guard let data = await cache.data(for: key) else { return nil }
         return try? decoder.decode(ItemsEnvelope.self, from: data).requests
+    }
+
+    private func fetchItemsFromNetwork(status: String? = nil) async throws -> [ShipyardItem] {
+        let queryItems = roadmapQueryItems(status: status)
+        let data: Data
+        do {
+            data = try await authedReadRequest(
+                path: "v1/requests",
+                queryItems: queryItems,
+                allowCachedFallback: false
+            )
+        } catch {
+            if !Self.isAuthorizationError(error) {
+                throw error
+            }
+            data = try await readRequest(
+                path: "v1/requests",
+                queryItems: queryItems,
+                allowCachedFallback: false
+            )
+        }
+        do {
+            return try decoder.decode(ItemsEnvelope.self, from: data).requests
+        } catch {
+            throw ShipyardError.decodingFailed
+        }
     }
 
     public func fetchItemCategories(status: String? = nil) async throws -> [ShipyardItemCategory] {
@@ -2405,6 +2450,27 @@ public final class ShipyardClient: @unchecked Sendable {
             cacheTTL: history ? 0 : Self.engagementReadCacheTTL,
             cachePolicy: cachePolicy
         )
+        return try decodeEngagementUpdates(data)
+    }
+
+    public func cachedEngagementUpdates(history: Bool = false) async -> ShipyardEngagementUpdates? {
+        let queryItems = engagementQueryItems(history: history)
+        let key = cacheKey(path: "v1/engagement/updates", queryItems: queryItems)
+        guard let data = await cache.data(for: key) else { return nil }
+        return try? decodeEngagementUpdates(data)
+    }
+
+    private func fetchEngagementUpdatesFromNetwork(history: Bool) async throws -> ShipyardEngagementUpdates {
+        let data = try await authedReadRequest(
+            path: "v1/engagement/updates",
+            queryItems: engagementQueryItems(history: history),
+            cachePolicy: .reloadIgnoringCache,
+            allowCachedFallback: false
+        )
+        return try decodeEngagementUpdates(data)
+    }
+
+    private func decodeEngagementUpdates(_ data: Data) throws -> ShipyardEngagementUpdates {
         let envelope: EngagementUpdatesEnvelope
         do {
             envelope = try decoder.decode(EngagementUpdatesEnvelope.self, from: data)
@@ -2709,16 +2775,63 @@ public final class ShipyardClient: @unchecked Sendable {
     public func syncQueuedWritesIfPossible(refreshAfterSync: Bool = true) async -> ShipyardOfflineSyncResult {
         let result = await offlineWriteQueue.flush(using: self)
         if refreshAfterSync && (result.flushedCount > 0 || result.droppedCount > 0) {
-            await refreshCachedReads(history: true, forceRoadmap: true)
+            _ = try? await pullRoadmapDaily()
+            _ = try? await pullEngagementDaily()
         }
         return result
     }
 
+    @available(*, deprecated, message: "Use syncDaily() for passive lifecycle synchronization.")
     @discardableResult
     public func refreshCachedDataAndSyncQueuedWrites(history: Bool = false) async -> ShipyardOfflineSyncResult {
-        let result = await syncQueuedWritesIfPossible(refreshAfterSync: false)
-        await refreshCachedReads(history: history, forceRoadmap: result.flushedCount > 0 || result.droppedCount > 0)
-        return result
+        await syncDaily(history: history).offlineWrites
+    }
+
+    @discardableResult
+    public func syncDaily(
+        history: Bool = false,
+        date: Date = Date(),
+        calendar: Calendar = ShipyardClient.serverActivityCalendar,
+        userDefaults: UserDefaults = .standard
+    ) async -> ShipyardDailySyncResult {
+        let offlineWrites = await syncQueuedWritesIfPossible(refreshAfterSync: false)
+        var roadmapItems = await cachedItems()
+        var engagementUpdates = await cachedEngagementUpdates(history: history)
+
+        do {
+            if let freshItems = try await pullRoadmapDaily(
+                date: date,
+                calendar: calendar,
+                userDefaults: userDefaults
+            ) {
+                roadmapItems = freshItems
+            }
+        } catch {
+            // Leave cached Roadmap content visible and retry later today.
+        }
+        do {
+            if let freshUpdates = try await pullEngagementDaily(
+                history: history,
+                date: date,
+                calendar: calendar,
+                userDefaults: userDefaults
+            ) {
+                engagementUpdates = freshUpdates
+            }
+        } catch {
+            // Leave cached Engagement content visible and retry later today.
+        }
+
+        let dayKey = Self.activityDayKey(for: date, calendar: calendar)
+        let isComplete = userDefaults.string(forKey: dailyRoadmapPullDefaultsKey()) == dayKey
+            && userDefaults.string(forKey: dailyEngagementPullDefaultsKey(history: history)) == dayKey
+
+        return ShipyardDailySyncResult(
+            roadmapItems: roadmapItems,
+            engagementUpdates: engagementUpdates,
+            offlineWrites: offlineWrites,
+            isComplete: isComplete
+        )
     }
 
     public func clearOfflineData() async {
@@ -2753,26 +2866,53 @@ public final class ShipyardClient: @unchecked Sendable {
     ) async throws -> [ShipyardItem]? {
         let dayKey = Self.activityDayKey(for: date, calendar: calendar)
         let defaultsKey = dailyRoadmapPullDefaultsKey()
+        let checkInKey = dailyCheckInDefaultsKey()
+        if userDefaults.string(forKey: defaultsKey) == dayKey {
+            // Migrate the pre-0.2.3 combined marker without repeating today's check-in.
+            if userDefaults.string(forKey: checkInKey) != dayKey {
+                userDefaults.set(dayKey, forKey: checkInKey)
+            }
+            if !force { return nil }
+        }
+
+        if userDefaults.string(forKey: checkInKey) != dayKey {
+            do {
+                _ = try await refreshSession(reason: "roadmap_pull")
+                userDefaults.set(dayKey, forKey: checkInKey)
+            } catch {
+                // Queue the one daily check-in with its original UTC day, but
+                // leave the Roadmap pull incomplete so content retries later.
+                if Self.isConnectivityError(error) {
+                    await enqueueOfflineDailyCheckIn(dayKey: dayKey, reason: "roadmap_pull")
+                    userDefaults.set(dayKey, forKey: checkInKey)
+                    throw ShipyardError.offlineQueued
+                }
+                throw error
+            }
+        }
+
+        let items = try await fetchItemsFromNetwork(status: status)
+        userDefaults.set(dayKey, forKey: defaultsKey)
+        return items
+    }
+
+    @discardableResult
+    public func pullEngagementDaily(
+        history: Bool = false,
+        date: Date = Date(),
+        calendar: Calendar = ShipyardClient.serverActivityCalendar,
+        userDefaults: UserDefaults = .standard,
+        force: Bool = false
+    ) async throws -> ShipyardEngagementUpdates? {
+        let dayKey = Self.activityDayKey(for: date, calendar: calendar)
+        let defaultsKey = dailyEngagementPullDefaultsKey(history: history)
         if !force, userDefaults.string(forKey: defaultsKey) == dayKey {
             return nil
         }
 
-        do {
-            _ = try await refreshSession(reason: "roadmap_pull")
-        } catch {
-            // Offline at the only open of the day: queue the check-in with
-            // the day it actually happened. The server accepts a bounded
-            // activityDate so the device-day is recorded once connectivity
-            // returns instead of being lost.
-            if Self.isConnectivityError(error) {
-                await enqueueOfflineDailyCheckIn(dayKey: dayKey, reason: "roadmap_pull")
-                userDefaults.set(dayKey, forKey: defaultsKey)
-                throw ShipyardError.offlineQueued
-            }
-            throw error
-        }
+        let updates = try await fetchEngagementUpdatesFromNetwork(history: history)
         userDefaults.set(dayKey, forKey: defaultsKey)
-        return try await fetchItems(status: status)
+        return updates
     }
 
     @available(*, deprecated, message: "Use pullRoadmapDaily() for the daily Roadmap read.")
@@ -2906,7 +3046,8 @@ public final class ShipyardClient: @unchecked Sendable {
 
     private func readRequest(
         path: String,
-        queryItems: [URLQueryItem] = []
+        queryItems: [URLQueryItem] = [],
+        allowCachedFallback: Bool = true
     ) async throws -> Data {
         let key = cacheKey(path: path, queryItems: queryItems)
         do {
@@ -2914,7 +3055,8 @@ public final class ShipyardClient: @unchecked Sendable {
             await cache.store(data, for: key)
             return data
         } catch {
-            if Self.shouldUseCachedRead(after: error),
+            if allowCachedFallback,
+               Self.shouldUseCachedRead(after: error),
                let cached = await cache.data(for: key) {
                 return cached
             }
@@ -2929,7 +3071,8 @@ public final class ShipyardClient: @unchecked Sendable {
         path: String,
         queryItems: [URLQueryItem] = [],
         cacheTTL: TimeInterval = 0,
-        cachePolicy: ShipyardReadCachePolicy = .automatic
+        cachePolicy: ShipyardReadCachePolicy = .automatic,
+        allowCachedFallback: Bool = true
     ) async throws -> Data {
         let key = cacheKey(path: path, queryItems: queryItems)
         if cachePolicy == .automatic,
@@ -2942,7 +3085,8 @@ public final class ShipyardClient: @unchecked Sendable {
             await cache.store(data, for: key)
             return data
         } catch {
-            if Self.shouldUseCachedRead(after: error),
+            if allowCachedFallback,
+               Self.shouldUseCachedRead(after: error),
                let cached = await cache.data(for: key) {
                 return cached
             }
@@ -3089,11 +3233,6 @@ public final class ShipyardClient: @unchecked Sendable {
         return queryItems
     }
 
-    private func refreshCachedReads(history: Bool, forceRoadmap: Bool = false) async {
-        _ = try? await pullRoadmapDaily(force: forceRoadmap)
-        _ = try? await fetchEngagementUpdates(history: history, cachePolicy: .reloadIgnoringCache)
-    }
-
     private static func shouldUseCachedRead(after error: Error) -> Bool {
         if isConnectivityError(error) {
             return true
@@ -3206,6 +3345,27 @@ public final class ShipyardClient: @unchecked Sendable {
             baseURL.absoluteString,
             productSlug,
             platform
+        ].joined(separator: "|")
+    }
+
+    private func dailyCheckInDefaultsKey() -> String {
+        [
+            "ShipyardKit",
+            "dailyCheckIn",
+            baseURL.absoluteString,
+            productSlug,
+            platform
+        ].joined(separator: "|")
+    }
+
+    private func dailyEngagementPullDefaultsKey(history: Bool) -> String {
+        [
+            "ShipyardKit",
+            "dailyEngagementPull",
+            baseURL.absoluteString,
+            productSlug,
+            platform,
+            history ? "history" : "current"
         ].joined(separator: "|")
     }
 

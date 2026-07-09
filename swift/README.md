@@ -2,7 +2,7 @@
 
 `ShipyardKit` is the Swift package product developers add to Apple apps for daily Roadmap pull visibility, Announcements, Ask, and Roadmap flows backed by Shipyard. It also includes service-token APIs for native admin tools, including Mac planner apps.
 
-Current SDK version: `0.2.1`.
+Current SDK version: `0.2.3`.
 
 ## Install via Swift Package Manager
 
@@ -29,17 +29,17 @@ Before wiring the app, confirm the Shipyard product exists in the workspace and 
 3. Instantiate `ShipyardClient` with `baseURL`, `productSlug`, and `installationIdProvider`.
    Optional: pass `platform` explicitly (`ios`, `ipados`, `macos`, `tvos`, `watchos`, `visionos`) or let ShipyardKit infer it.
    By default, ShipyardKit also sends `CFBundleShortVersionString`, `CFBundleVersion`, and `ShipyardClient.sdkVersion`.
-4. Call `pullRoadmapDaily()` on launch and foreground resume so Shipyard can see one background Roadmap pull per UTC day.
+4. Call `syncDaily()` on launch and foreground resume so Roadmap, Engagement, queued writes, and the Shipyard check-in complete once per UTC day.
 5. Call `refreshSession()` before the first write, or let `submitItem`/`vote` mint a session automatically.
-6. When the user opens Roadmap, call `cachedItems()` first to render stored items immediately, then call `pullRoadmapDaily(force: true)` in the background and replace the visible groups if the fresh response changed.
+6. When the user opens Roadmap, call `cachedItems()` first to render stored items immediately, then call normal `pullRoadmapDaily()` and replace the visible groups only when it returns fresh content.
 7. Call `fetchItems()` when you need an explicit public item read outside the daily/background pull flow.
 8. Use `shipyardGroupedByStatus()` on the items returned by `fetchItems()` or `pullRoadmapDaily(...)` for Open, Planned, In Progress, Shipped, and Closed sections sorted by upvotes inside each section.
 9. For Apple TV/tvOS apps, wire only `pullRoadmapDaily()` by default and do not add visible Shipyard UI unless admin instructions explicitly request it.
-10. Preferred build for other Apple apps: add one Shipyard section near Settings/About with three entries: Announcements, Ask, and Roadmap. Ask and Announcements should stay hidden unless Shipyard returns live content for the product.
+10. Preferred build for other Apple apps: add three separate rows under Support. Roadmap is always visible; Announcements and Ask are hidden unless Shipyard returns current displayable content for that row. Other Support features remain app-owned.
 11. The Roadmap entry should open a Roadmap page in Settings or the nearest equivalent app area. It should let users submit Feature or Bug Fix requests, show active public items in their current status, and put a real tappable upvote button on each item.
 12. Style the upvote button from app theme colors: quieter/duller when the install has not voted on that item, stronger/bolder after the install has voted.
 13. Roadmap suggestions should only offer Feature and Bug Fix.
-14. Call `refreshCachedDataAndSyncQueuedWrites()` on app launch and foreground resume. This flushes queued offline writes, uses the daily Roadmap pull for Roadmap cache refreshes, and keeps Announcements and Ask timely.
+14. Use `syncDaily()` as the only passive lifecycle coordinator. It returns cached or fresh Roadmap and Engagement data, suppresses repeat same-day pulls, and retries incomplete content later without repeating the daily check-in.
 15. Branch on `ask.type` and use `respondToAsk(...)` for every Ask type: single choice, multi choice, star rating, numeric rating, and open text.
 16. Use `markAnnouncementShown(...)`, `dismissAnnouncement(...)`, and `clickAnnouncement(...)` for announcement tracking tied to actual UI display and interaction.
 17. If the app opts into push notifications, call `registerNotificationSubscription(endpointToken:provider:environment:)` after APNs registration and `deleteNotificationSubscription(provider:)` when notifications are disabled.
@@ -49,10 +49,16 @@ Before wiring the app, confirm the Shipyard product exists in the workspace and 
 21. Call `vote(itemId:unvote:)` for voting.
 22. Treat `ShipyardError.offlineQueued` as a successful local save. The SDK persists the write and automatically retries when the device is online again.
 
+## Upgrade From 0.2.2 To 0.2.3
+
+- Replace passive lifecycle calls to `pullRoadmapDaily()`, `fetchEngagementUpdates()`, or `refreshCachedDataAndSyncQueuedWrites()` with `syncDaily()`.
+- Move Roadmap, Announcements, and Ask into separate rows under Support. Keep only Roadmap permanently visible.
+- Remove `force: true` from ordinary Roadmap opens.
+
 ## Upgrade From 0.2.0 To 0.2.1
 
-- Replace deprecated lifecycle helpers with `pullRoadmapDaily()` on launch and foreground resume.
-- For visible Roadmap screens, render `cachedItems()` first, then run `pullRoadmapDaily(force: true)` in the background and update only when the fresh response differs.
+- Replace deprecated lifecycle helpers and repeated Engagement refreshes with `syncDaily()` on launch and foreground resume.
+- For visible Roadmap screens, render `cachedItems()` first, then run normal `pullRoadmapDaily()` and update only when it returns fresh content.
 - Prefer `fetchAsks()` and `respondToAsk(...)` over compatibility helpers in new or touched Ask UI.
 - Update site/admin usage summaries to prefer `dailyRoadmapPullRows` and `dailyRoadmapInstallCount`.
 - Rename local setup references from `APPLE_TV_DAILY_ACTIVE_SETUP.md` to `APPLE_TV_ROADMAP_PULL_SETUP.md`.
@@ -146,13 +152,12 @@ let client = ShipyardClient(
 )
 
 _ = try await client.refreshSession()
-_ = try await client.pullRoadmapDaily()
-_ = await client.refreshCachedDataAndSyncQueuedWrites()
+let daily = await client.syncDaily()
 let cachedItems = await client.cachedItems()
 let items = try await client.fetchItems()
 let statusGroups = items.shipyardGroupedByStatus()
 let categories = try await client.fetchItemCategories()
-let updates = try await client.fetchEngagementUpdates()
+let updates = daily.engagementUpdates
 let availability = items.first?.availabilityLabel(currentAppVersion: "1.0.2")
 let target = items.first?.targetDateLabel
 let replyTime = items.first?.developerRespondedAtRelativeLabel()
@@ -166,7 +171,7 @@ let bug = try await client.submitItem(
     description: nil,
     itemType: .bugfix
 )
-if let ask = updates.asks.first {
+if let updates, let ask = updates.asks.first {
     switch ask.type {
     case .singleChoice:
         if let option = ask.options.first {
@@ -182,7 +187,7 @@ if let ask = updates.asks.first {
         break
     }
 }
-if let announcement = updates.announcements.first {
+if let updates, let announcement = updates.announcements.first {
     _ = try await client.markAnnouncementShown(
         announcementId: announcement.id,
         visibleMs: 1500,
@@ -204,12 +209,12 @@ Recommended launch/resume hook:
 
 ```swift
 .task {
-    _ = await client.refreshCachedDataAndSyncQueuedWrites(history: true)
+    _ = await client.syncDaily()
 }
 .onChange(of: scenePhase) { phase in
     if phase == .active {
         Task {
-            _ = await client.refreshCachedDataAndSyncQueuedWrites(history: true)
+            _ = await client.syncDaily()
         }
     }
 }

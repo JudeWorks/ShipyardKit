@@ -13,7 +13,7 @@
   "platform": "ios",
   "appVersion": "1.0.2",
   "buildNumber": "102",
-  "shipyardKitVersion": "0.2.2",
+  "shipyardKitVersion": "0.2.3",
   "sessionReason": "roadmap_pull",
   "activityDate": "2026-05-13"
 }
@@ -37,12 +37,12 @@
     "platform": "ios",
     "appVersion": "1.0.2",
     "buildNumber": "102",
-    "shipyardKitVersion": "0.2.2"
+    "shipyardKitVersion": "0.2.3"
   }
 }
 ```
 
-ShipyardKit also sends `X-ShipyardKit-Version: 0.2.2` on SDK requests.
+ShipyardKit also sends `X-ShipyardKit-Version: 0.2.3` on SDK requests.
 
 `pullRoadmapDaily()` maps to this endpoint and then reads `GET /v1/requests`. The SDK sends `sessionReason: "roadmap_pull"` when it refreshes the mobile session for that daily read. Shipyard records one app/platform/version activity row per UTC day per install, so the site can show which apps are using the Roadmap pull without presenting it as a separate outbound signal.
 
@@ -432,7 +432,7 @@ Task payload:
 
 `GET /v1/engagement/updates?product=atlas`
 
-Recommended mobile clients call this when opening Announcements or Ask surfaces. ShipyardKit caches this authenticated engagement read for 15 minutes by default; use `cachePolicy: .reloadIgnoringCache` only for deliberate user-initiated refreshes. Use `pullRoadmapDaily()` on app launch and foreground resume for daily Roadmap pull visibility.
+Recommended mobile clients call `syncDaily()` from app launch and foreground resume. It reads this endpoint at most once per successful UTC-day cycle and returns cached Engagement content on repeated same-day lifecycle calls. Use `cachePolicy: .reloadIgnoringCache` only after a deliberate user interaction that requires refreshed state, not for passive row opens.
 
 ### Headers
 
@@ -670,9 +670,12 @@ Each request may include roadmap release fields:
 
 ShipyardKit exposes both raw and presentation-ready reads:
 
+- `syncDaily()` coordinates queued writes, the once-daily Roadmap pull/check-in, and the once-daily Engagement pull. It returns cached content on repeated same-day calls and retries incomplete content later without repeating the check-in.
+- `pullEngagementDaily()` performs only the once-daily Announcements/Ask pull.
+- `cachedEngagementUpdates()` reads the last stored Announcements and Ask data without network access.
 - `fetchItems()` returns the API items.
 - `cachedItems()` returns the last stored Roadmap items without network access, which lets the app render Roadmap immediately when a cached response exists.
-- When a user opens Roadmap, render `cachedItems()` first, then call `pullRoadmapDaily(force: true)` in the background and update the visible groups if the fresh response differs.
+- When a user opens Roadmap, render `cachedItems()` first, then call normal `pullRoadmapDaily()` in the background and update the visible groups only when fresh content is returned. Do not use `force: true` for ordinary opens.
 - `fetchItems().shipyardGroupedByStatus()` groups items into Open, Planned, In Progress, Shipped, and Closed sections. Items inside each section are sorted from most upvoted to least upvoted.
 - `fetchItemCategories()` groups items into planner item-type categories, sorts categories by total votes, and sorts each category's items from most upvoted to least upvoted.
 - `ShipyardItem.availabilityLabel(currentAppVersion:)` returns version-aware display text when the item has enough release data.

@@ -1,5 +1,22 @@
 # ShipyardKit Changelog
 
+## 0.2.3 — 2026-07-09
+
+- Added `syncDaily()` as the standard lifecycle coordinator for one Roadmap,
+  Engagement, queued-write, and check-in cycle per UTC calendar day.
+- Added `pullEngagementDaily()` and `cachedEngagementUpdates()` so
+  Announcements and Ask can use cached-first, once-daily behavior.
+- Split the daily check-in marker from successful Roadmap and Engagement read
+  markers. Failed content can retry later the same day without repeating the
+  successful or queued check-in.
+- Forced Roadmap reads no longer repeat the daily check-in.
+- Updated the standard UI contract to three separate rows under Support:
+  Roadmap is always visible; Announcements and Ask exist only with current
+  content. Other Support features remain app-owned.
+- Updated installer guidance, starter configuration, checklist, API contract,
+  and SwiftUI example to remove passive `force: true` and repeated lifecycle
+  Engagement refreshes.
+
 ## 0.2.2 — 2026-07-06
 
 - Daily check-in reliability: the session call now retries once with a short

@@ -43,29 +43,11 @@ struct ShipyardKitLauncherView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Shipyard")
+                Text("Support")
                     .font(.headline)
-                Text("Place these links near Settings or About.")
+                Text("Roadmap is always available. Other rows appear only with current content.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-
-                Button {
-                    showingAnnouncements = true
-                } label: {
-                    Label("Announcements", systemImage: "megaphone")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.bordered)
-                .disabled((engagementUpdates?.announcements ?? []).isEmpty)
-
-                Button {
-                    showingAsk = true
-                } label: {
-                    Label("Ask", systemImage: "questionmark.bubble")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.bordered)
-                .disabled((engagementUpdates?.asks ?? []).isEmpty)
 
                 Button {
                     showingRoadmap = true
@@ -74,6 +56,26 @@ struct ShipyardKitLauncherView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.borderedProminent)
+
+                if !(engagementUpdates?.announcements ?? []).isEmpty {
+                    Button {
+                        showingAnnouncements = true
+                    } label: {
+                        Label("Announcements", systemImage: "megaphone")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if !(engagementUpdates?.asks ?? []).isEmpty {
+                    Button {
+                        showingAsk = true
+                    } label: {
+                        Label("Ask", systemImage: "questionmark.bubble")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
             .padding(12)
             .background(Color.secondary.opacity(0.08))
@@ -84,35 +86,39 @@ struct ShipyardKitLauncherView: View {
                 client: client,
                 announcements: engagementUpdates?.announcements ?? [],
                 screenKey: "settings",
-                onRefresh: refreshEngagement
+                onRefresh: refreshAfterInteraction
             )
         }
         .sheet(isPresented: $showingAsk) {
             ShipyardKitAskSheet(
                 client: client,
                 asks: engagementUpdates?.asks ?? [],
-                onRefresh: refreshEngagement
+                onRefresh: refreshAfterInteraction
             )
         }
         .sheet(isPresented: $showingRoadmap) {
             ShipyardKitRoadmapSheet(client: client)
         }
         .task {
-            await refreshEngagement()
+            await syncDaily()
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active {
-                Task { await refreshEngagement() }
+                Task { await syncDaily() }
             }
         }
     }
 
-    private func refreshEngagement() async {
+    private func syncDaily() async {
         engagementError = nil
-        _ = try? await client.pullRoadmapDaily()
-        _ = await client.refreshCachedDataAndSyncQueuedWrites(history: true)
+        let result = await client.syncDaily()
+        engagementUpdates = result.engagementUpdates
+    }
+
+    private func refreshAfterInteraction() async {
+        engagementError = nil
         do {
-            engagementUpdates = try await client.fetchEngagementUpdates()
+            engagementUpdates = try await client.fetchEngagementUpdates(cachePolicy: .reloadIgnoringCache)
         } catch {
             engagementError = error.localizedDescription
         }
@@ -641,8 +647,9 @@ struct ShipyardKitRoadmapSheet: View {
         }
         do {
             errorMessage = nil
-            let freshItems = try await client.pullRoadmapDaily(force: true) ?? []
-            applyRoadmapItems(freshItems, force: false)
+            if let freshItems = try await client.pullRoadmapDaily() {
+                applyRoadmapItems(freshItems, force: false)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

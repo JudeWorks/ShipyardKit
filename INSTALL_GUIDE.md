@@ -38,8 +38,8 @@ If shipyardBaseUrl or productSlug are missing and cannot be found safely, stop a
 
 Upgrade note for existing ShipyardKit 0.2.0 integrations:
 - Update the copied `ShipyardKit/swift` package plus `VERSION` and `CHANGELOG.md`.
-- Replace deprecated lifecycle calls such as `pingDailyActiveDevice()` or `checkInDailyActiveDevice()` with `pullRoadmapDaily()` on launch and foreground resume.
-- Update visible Roadmap screens to render `cachedItems()` first, then call `pullRoadmapDaily(force: true)` in the background and refresh the visible Roadmap only when fresh data differs.
+- Replace deprecated lifecycle calls and repeated Engagement refreshes with `syncDaily()` on launch and foreground resume.
+- Update visible Roadmap screens to render `cachedItems()` first, then call normal `pullRoadmapDaily()` and refresh the visible Roadmap only when it returns fresh data.
 - Prefer `fetchAsks()` and `respondToAsk(...)` for Ask UI.
 - Use `dailyRoadmapPullRows` and `dailyRoadmapInstallCount` in site/admin summaries when available; older count fields are compatibility fallbacks only.
 - Replace local setup references to `APPLE_TV_DAILY_ACTIVE_SETUP.md` with `APPLE_TV_ROADMAP_PULL_SETUP.md`.
@@ -49,14 +49,16 @@ Implementation requirements:
 - Use anonymous end-user flow unless the host app already has account identity to attach separately.
 - Verify the target Shipyard product exists in the workspace and is an app product. Product status does not block ShipyardKit mobile sessions.
 - Let ShipyardKit mint short-lived tokens through POST /v1/auth/mobile/public-session.
-- Configure `pullRoadmapDaily()` on app launch and foreground resume so each install performs one background Roadmap pull per UTC day.
+- Configure `syncDaily()` on app launch and foreground resume so each install performs one coordinated Roadmap, Engagement, queued-write, and check-in sync per UTC calendar day.
 - Use `ShipyardInstallationIdentifier.stable()` for `installationIdProvider` — it persists the id in the Keychain so reinstalls keep the same device identity.
+- Confirm the mobile session sends the configured product slug, stable installation id, inferred platform, `CFBundleShortVersionString`, `CFBundleVersion`, `ShipyardClient.sdkVersion`, `sessionReason: "roadmap_pull"`, and the original UTC `activityDate` for a queued offline check-in.
 - Offline launches are safe: if the daily pull fails with a connectivity error, the SDK queues the check-in with its UTC day and delivers it automatically on the next connection (`ShipyardError.offlineQueued` is thrown so callers can ignore it with `try?`).
-- `pullRoadmapDaily()` should be called freely from lifecycle hooks; the SDK suppresses duplicate successful Roadmap pulls for the same UTC day.
-- Use `force: true` only for deliberate user-initiated Roadmap opens or debug verification, not for passive lifecycle hooks.
+- `syncDaily()` should be called freely from lifecycle hooks; the SDK suppresses duplicate successful Roadmap and Engagement pulls for the same UTC day and retries incomplete content later without repeating the daily check-in.
+- Do not use `force: true` for ordinary Roadmap opens. Reserve it for deliberate debug verification; even forced content pulls must not repeat the daily check-in.
 - For Apple TV/tvOS projects, read `APPLE_TV_ROADMAP_PULL_SETUP.md` and wire only `pullRoadmapDaily()` by default. Do not add visible Roadmap, Ask, Announcements, voting, inboxes, badges, or notification-style Shipyard UI unless the admin instructions explicitly request visible UI.
-- For other Apple app targets, install Roadmap and add Ask and Announcements support. Ask and Announcements should stay hidden unless Shipyard returns live content for the product.
-- Prefer one Shipyard section near Settings or About with exactly three areas: Announcements, Ask, and Roadmap. Adapt the presentation to the app's existing design while preserving those labels and behavior unless the admin instructions explicitly request different wording.
+- For other Apple app targets, add three separate rows under Support: Roadmap, Announcements, and Ask.
+- Roadmap is always visible. Show Announcements only while Shipyard returns a current announcement, and show Ask only while Shipyard returns a current displayable Ask item. Do not render empty or disabled conditional rows.
+- ShipyardKit owns only those three rows. Leave all other Support features to the host app.
 - Use the scoped token for:
   - GET /v1/engagement/updates
   - GET /v1/engagement/asks
@@ -73,8 +75,7 @@ Implementation requirements:
 - Each roadmap item must have an actual tappable upvote button. Do not make the vote count or icon merely decorative.
 - The upvote button should show the current vote count and voted/unvoted state. Maintain local per-install vote state from successful `vote(itemId:)` and `vote(itemId:unvote: true)` calls when the API response does not include a persisted item-level voted flag.
 - Style the unvoted upvote button with a quieter/duller color treatment and the voted state with a stronger/bolder treatment. Derive both colors from the app's existing theme.
-- Refresh Engagement updates on app launch and foreground resume when the app uses Announcements or Ask unless the app has a clearly conflicting lifecycle pattern.
-- Use `fetchEngagementUpdates()` as the default pull when the app needs both Ask and Announcements, and call it again when opening Announcements or Ask.
+- Use the Engagement data returned by `syncDaily()` or `cachedEngagementUpdates()` to drive Announcements and Ask visibility. Do not add separate passive launch, foreground, or row-open refreshes.
 - If the app renders Ask UI, branch on `ask.type` and support every current type:
   - .singleChoice: submit exactly one option id.
   - .multiChoice: submit selected option ids and honor ask.maxSelections when present.
@@ -85,7 +86,7 @@ Implementation requirements:
 - If the app renders announcements, only call markAnnouncementShown(...) after the announcement is actually visible on screen.
 - If the app supports dismissal or CTA taps, wire dismissAnnouncement(...) and clickAnnouncement(...).
 - Prefer status grouping for Roadmap unless the app already has a clearer Feature/Bug Fix section pattern.
-- When the user opens Roadmap, render `cachedItems()` immediately if cached items exist, then call `pullRoadmapDaily(force: true)` in the background and update the displayed Roadmap if the fresh response differs.
+- When the user opens Roadmap, render `cachedItems()` immediately if cached items exist, then call normal `pullRoadmapDaily()` in the background and update the displayed Roadmap only when it returns fresh content.
 - For status grouping, use fetchItems().shipyardGroupedByStatus() so sections stay in lifecycle order: Open, Planned, In Progress, Shipped, Closed. Items inside each status must be sorted by vote count.
 - For type grouping, use fetchItemCategories() so planner item-type categories are sorted by total votes and items inside each category are sorted by vote count.
 - Show release-aware labels by calling item.availabilityLabel(currentAppVersion:) with CFBundleShortVersionString when rendering each roadmap item.
@@ -110,7 +111,7 @@ Deliverables:
 - summary of where ShipyardClient is configured
 - summary of where the daily Roadmap pull is called, and confirmation it uses normal once-per-day mode in production
 - summary of how token refresh is handled
-- summary of where and when Engagement updates are refreshed in the app
+- summary of where `syncDaily()` is called and confirmation that Roadmap, Engagement, and check-in work is limited to one successful UTC-day cycle with same-day retry after failures
 - summary of whether the app uses status grouping or Feature/Bug Fix categories, and how sorting works
 - summary of the Roadmap open behavior, including cached-first render and background fresh pull update
 - summary of how Ask is rendered and submitted, including which of single choice, multi choice, star rating, numeric rating, and open text are supported

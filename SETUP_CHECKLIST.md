@@ -28,28 +28,30 @@ Use this after integration to confirm ShipyardKit is ready for developer or auto
 ## Token Flow
 
 - [ ] App successfully calls `POST /v1/auth/mobile/public-session`.
-- [ ] App calls `pullRoadmapDaily()` on launch and foreground resume when daily Roadmap pull visibility is wanted.
-- [ ] Repeated lifecycle `pullRoadmapDaily()` calls on the same UTC day do not send duplicate background Roadmap pulls; `force: true` is only used for user-initiated Roadmap opens or debug verification.
-- [ ] Opening Roadmap renders `cachedItems()` first when cached data exists, then runs `pullRoadmapDaily(force: true)` in the background and updates the visible Roadmap if fresh data differs.
-- [ ] Repeated `fetchEngagementUpdates()` calls within 15 minutes use the SDK cache unless the user deliberately refreshes with `cachePolicy: .reloadIgnoringCache`.
+- [ ] App calls `syncDaily()` on launch and foreground resume.
+- [ ] Repeated lifecycle calls on the same UTC day do not send duplicate Roadmap pulls, Engagement pulls, or daily check-ins after the daily sync succeeds.
+- [ ] Failed Roadmap or Engagement content retries later the same UTC day without repeating a successful or queued daily check-in.
+- [ ] Opening Roadmap renders `cachedItems()` first and then calls normal `pullRoadmapDaily()`; ordinary opens do not use `force: true`.
+- [ ] The daily mobile session reports the correct product slug, stable installation id, platform, app version, build number, ShipyardKit version, `roadmap_pull` reason, and queued activity date when applicable.
 - [ ] Token is stored in memory only, or secure storage with expiry awareness.
 - [ ] Expired token triggers refresh and retry.
 - [ ] App never ships a static `SERVICE_API_KEY`, `API_TOKEN`, or admin secret.
 
 ## App Layout
 
-- [ ] Non-tvOS integration uses exactly three user-facing areas: Announcements, Ask, and Roadmap.
-- [ ] The app uses one Shipyard section near Settings/About with three rows/cards/list entries unless admin instructions explicitly requested a different location.
-- [ ] Ask and Announcements stay hidden unless Shipyard returns live content for the product.
-- [ ] Any custom presentation preserves the Announcements, Ask, and Roadmap labels and behavior unless admin instructions explicitly approved different wording.
+- [ ] Non-tvOS integration uses three separate ShipyardKit rows under Support: Roadmap, Announcements, and Ask.
+- [ ] Roadmap is always visible.
+- [ ] Announcements is hidden when Shipyard returns no current announcement.
+- [ ] Ask is hidden when Shipyard returns no current displayable Ask item.
+- [ ] Empty or disabled Announcements and Ask rows are not rendered.
+- [ ] ShipyardKit does not add or modify other app-owned Support features.
 - [ ] Roadmap opens as a page inside Settings or the nearest equivalent app settings/about area.
 - [ ] Roadmap page includes both item submission and public item browsing.
 
 ## Engagement Read Flow
 
 - [ ] App successfully calls `GET /v1/engagement/updates` with the scoped token.
-- [ ] The app refreshes Engagement data on launch and foreground resume when Announcements or Ask are enabled.
-- [ ] If the app has dedicated Announcements or Ask areas, opening them also refreshes Engagement data.
+- [ ] The app uses the Engagement result from `syncDaily()` or `cachedEngagementUpdates()` instead of adding separate passive lifecycle or row-open refreshes.
 - [ ] Ask UI only appears when asks are returned.
 - [ ] Announcement UI only appears when announcements are returned.
 - [ ] If the app shows an announcement, it records `shown` only after the announcement is actually visible on screen.
