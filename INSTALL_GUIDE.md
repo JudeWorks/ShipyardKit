@@ -18,7 +18,8 @@ Follow these rules exactly:
 9) Read and apply ./ShipyardKit/user-setup/shipyardkit-config.example.json as the starter config shape.
 10) Follow security requirements in ./ShipyardKit/security/threat-model.md.
 11) Follow endpoint contracts in ./ShipyardKit/api-contracts/shipyardkit-api.md.
-12) Validate with ./ShipyardKit/SETUP_CHECKLIST.md and report each check pass/fail.
+12) Run Swift package tests with ./ShipyardKit/scripts/test-swift-package.sh. Do not open a generated .xctest bundle directly.
+13) Validate with ./ShipyardKit/SETUP_CHECKLIST.md and report each check pass/fail.
 
 Required install inputs:
 - shipyardBaseUrl
@@ -45,6 +46,8 @@ Upgrade note for existing ShipyardKit 0.2.0 integrations:
 - Replace local setup references to `APPLE_TV_DAILY_ACTIVE_SETUP.md` with `APPLE_TV_ROADMAP_PULL_SETUP.md`.
 
 Implementation requirements:
+- On macOS, use `./ShipyardKit/scripts/test-swift-package.sh` for Swift package verification. It builds in a fresh temporary scratch directory outside downloaded or cloud-backed project folders, then removes those generated artifacts. This prevents Gatekeeper from misclassifying the local XCTest bundle as a damaged downloaded app.
+- Never launch or open `ShipyardKitPackageTests.xctest` directly. The verification script runs it through `swift test`.
 - Do not embed static admin, service, or full-access API keys in the app.
 - Use anonymous end-user flow unless the host app already has account identity to attach separately.
 - Verify the target Shipyard product exists in the workspace and is an app product. Product status does not block ShipyardKit mobile sessions.

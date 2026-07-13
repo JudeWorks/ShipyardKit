@@ -76,6 +76,7 @@ Use the three-row Support pattern by default, styled with the host app's existin
 - `swift/Package.swift`: Swift Package manifest for `ShipyardKit`.
 - `swift/Sources/ShipyardKit/ShipyardClient.swift`: Swift client.
 - `swift/examples/ShipyardKitExampleView.swift`: SwiftUI example using fictional Acme/Atlas values.
+- `scripts/test-swift-package.sh`: macOS-safe package verification that keeps generated XCTest bundles out of downloaded or cloud-backed project folders.
 
 ## Server Requirements
 
