@@ -1,5 +1,11 @@
 # ShipyardKit Changelog
 
+## Unreleased
+
+- Added a macOS-safe Swift package test helper that builds disposable XCTest
+  artifacts outside downloaded and cloud-backed project folders, preventing
+  intermittent Gatekeeper “damaged” alerts during installer verification.
+
 ## 0.2.3 — 2026-07-09
 
 - Added `syncDaily()` as the standard lifecycle coordinator for one Roadmap,
