@@ -81,14 +81,14 @@ Core planner calls:
 let products = try await client.fetchProducts(
     type: "app",
     sort: "update_priority_desc",
-    workspaceSlug: "judeworks",
+    workspaceSlug: "acme-studio",
     apiToken: serviceApiToken
 )
 
 let detail = try await client.fetchProduct(
     slug: "atlas",
     includePlanner: true,
-    workspaceSlug: "judeworks",
+    workspaceSlug: "acme-studio",
     apiToken: serviceApiToken
 )
 
@@ -101,7 +101,7 @@ _ = try await client.updateProduct(
         workingVersionStatus: "building",
         workingVersionProgress: 70
     ),
-    workspaceSlug: "judeworks",
+    workspaceSlug: "acme-studio",
     apiToken: serviceApiToken
 )
 
@@ -114,14 +114,14 @@ let item = try await client.createPlannerItem(
         origin: "internal",
         itemType: "polish"
     ),
-    workspaceSlug: "judeworks",
+    workspaceSlug: "acme-studio",
     apiToken: serviceApiToken
 )
 
 _ = try await client.createPlannerTask(
     itemId: item.id,
     title: "Profile large release groups on macOS",
-    workspaceSlug: "judeworks",
+    workspaceSlug: "acme-studio",
     apiToken: serviceApiToken
 )
 ```
