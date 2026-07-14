@@ -82,8 +82,8 @@ final class ShipyardKitTests: XCTestCase {
             let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
             let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
             XCTAssertEqual(queryItems["days"], "30")
-            XCTAssertEqual(queryItems["hostname"], "www.judeworks.app")
-            XCTAssertEqual(queryItems["ws"], "judeworks")
+            XCTAssertEqual(queryItems["hostname"], "www.acme.example")
+            XCTAssertEqual(queryItems["ws"], "acme-studio")
             XCTAssertEqual(queryItems["productId"], "prod_123")
             XCTAssertEqual(queryItems["refresh"], "1")
 
@@ -94,7 +94,7 @@ final class ShipyardKitTests: XCTestCase {
                     "configured": true,
                     "available": true,
                     "error": NSNull(),
-                    "hostname": "www.judeworks.app",
+                    "hostname": "www.acme.example",
                     "days": 30,
                     "scope": [
                         "type": "product",
@@ -122,11 +122,11 @@ final class ShipyardKitTests: XCTestCase {
                         ]
                     ],
                     "allowedHostnames": [
-                        "judeworks.app",
-                        "www.judeworks.app",
-                        "judeworks.startshipyard.com"
+                        "acme.example",
+                        "www.acme.example",
+                        "acme-studio.startshipyard.com"
                     ],
-                    "selectedHostname": "www.judeworks.app",
+                    "selectedHostname": "www.acme.example",
                     "cached": false,
                     "refreshedAt": "2026-06-07T12:00:00.000Z",
                     "expiresAt": "2026-06-07T12:15:00.000Z"
@@ -136,18 +136,18 @@ final class ShipyardKitTests: XCTestCase {
 
         let analytics = try await client.fetchSiteAnalytics(
             days: 30,
-            hostname: "www.judeworks.app",
-            workspaceSlug: "judeworks",
+            hostname: "www.acme.example",
+            workspaceSlug: "acme-studio",
             productId: "prod_123",
             refresh: true,
             apiToken: "service-token"
         )
 
         XCTAssertTrue(analytics.available)
-        XCTAssertEqual(analytics.selectedHostname, "www.judeworks.app")
+        XCTAssertEqual(analytics.selectedHostname, "www.acme.example")
         XCTAssertEqual(analytics.scope?.productSlug, "atlas")
         XCTAssertEqual(analytics.scope?.pathPrefixes ?? [], ["/product/atlas", "/landing/atlas"])
-        XCTAssertEqual(analytics.allowedHostnames, ["judeworks.app", "www.judeworks.app", "judeworks.startshipyard.com"])
+        XCTAssertEqual(analytics.allowedHostnames, ["acme.example", "www.acme.example", "acme-studio.startshipyard.com"])
         XCTAssertEqual(analytics.totals.visits, 42)
         XCTAssertEqual(analytics.trend.first?.date, "2026-06-01")
         XCTAssertEqual(analytics.topPaths.first?.path, "/")
@@ -169,7 +169,7 @@ final class ShipyardKitTests: XCTestCase {
             XCTAssertEqual(queryItems["productId"], "prod_123")
             XCTAssertEqual(queryItems["view"], "week")
             XCTAssertEqual(queryItems["activity"], "sessions")
-            XCTAssertEqual(queryItems["ws"], "judeworks")
+            XCTAssertEqual(queryItems["ws"], "acme-studio")
 
             return try Self.jsonResponse(for: request, status: 200, jsonObject: Self.appAnalyticsObject())
         }
@@ -179,11 +179,11 @@ final class ShipyardKitTests: XCTestCase {
             productId: "prod_123",
             view: "week",
             activity: "sessions",
-            workspaceSlug: "judeworks",
+            workspaceSlug: "acme-studio",
             apiToken: "service-token"
         )
 
-        XCTAssertEqual(analytics.studio?.slug, "judeworks")
+        XCTAssertEqual(analytics.studio?.slug, "acme-studio")
         XCTAssertEqual(analytics.products.first?.name, "Atlas")
         XCTAssertEqual(analytics.filters.activity, "sessions")
         XCTAssertEqual(analytics.summary.totalUnits, 44)
@@ -206,7 +206,7 @@ final class ShipyardKitTests: XCTestCase {
 
             let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
             let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
-            XCTAssertEqual(queryItems["ws"], "judeworks")
+            XCTAssertEqual(queryItems["ws"], "acme-studio")
             XCTAssertEqual(queryItems["restart"], "force")
 
             return try Self.jsonResponse(
@@ -225,7 +225,7 @@ final class ShipyardKitTests: XCTestCase {
         }
 
         let result = try await client.startAppAnalyticsSync(
-            workspaceSlug: "judeworks",
+            workspaceSlug: "acme-studio",
             restart: true,
             apiToken: "service-token"
         )
@@ -247,7 +247,7 @@ final class ShipyardKitTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-ShipyardKit-Version"), ShipyardClient.sdkVersion)
 
             let queryItems = try Self.queryItems(request)
-            XCTAssertEqual(queryItems["ws"], "judeworks")
+            XCTAssertEqual(queryItems["ws"], "acme-studio")
             XCTAssertEqual(queryItems["type"], "app")
             XCTAssertEqual(queryItems["sort"], "update_priority_desc")
             XCTAssertEqual(queryItems["minProgress"], "20")
@@ -274,13 +274,15 @@ final class ShipyardKitTests: XCTestCase {
             type: "app",
             sort: "update_priority_desc",
             minProgress: 20,
-            workspaceSlug: "judeworks",
+            workspaceSlug: "acme-studio",
             apiToken: "service-token"
         )
 
         XCTAssertEqual(products.map(\.slug), ["atlas"])
         XCTAssertEqual(products.first?.planning?.workingVersion, "1.4.0")
         XCTAssertEqual(products.first?.workingVersionProgress, 65)
+        XCTAssertEqual(products.first?.appStore?.currentVersion, "1.3.2")
+        XCTAssertEqual(products.first?.appStore?.lastSyncAt, "2026-06-07T12:00:00.000Z")
         XCTAssertEqual(products.first?.updatePriority?.priorityType, "update_priority_snoozed")
         XCTAssertEqual(products.first?.updatePriorityPaused, true)
         XCTAssertEqual(products.first?.updatePriorityPausedUntil, "2026-07-04T12:00:00.000Z")
@@ -343,6 +345,44 @@ final class ShipyardKitTests: XCTestCase {
         XCTAssertNil(products.first?.supportUrl)
     }
 
+    func testFetchCurrentServiceAPIKeyRequiresAuthenticatedEndpointAndDecodesScopes() async throws {
+        let client = makeMockClient(productSlug: "service-key-\(UUID().uuidString)")
+        await client.clearOfflineData()
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/settings/api-key/current")
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer service-token")
+            XCTAssertEqual(try Self.queryItems(request)["ws"], "acme-studio")
+            return try Self.jsonResponse(
+                for: request,
+                status: 200,
+                jsonObject: [
+                    "ok": true,
+                    "serverTime": "2026-07-13T23:00:00.000Z",
+                    "apiKey": [
+                        "id": "jwk_builder_1234",
+                        "name": "Shipyard Builder",
+                        "scopes": ["api:write"],
+                        "allowedProductSlugs": [],
+                        "status": "active",
+                        "expiresAt": NSNull(),
+                        "rotationRecommended": false
+                    ]
+                ]
+            )
+        }
+
+        let status = try await client.fetchCurrentServiceAPIKey(
+            workspaceSlug: "acme-studio",
+            apiToken: "service-token"
+        )
+
+        XCTAssertTrue(status.ok)
+        XCTAssertEqual(status.apiKey.name, "Shipyard Builder")
+        XCTAssertEqual(status.apiKey.scopes, ["api:write"])
+    }
+
     func testFetchProductIncludesNativePlannerReleaseGroups() async throws {
         let client = makeMockClient(productSlug: "planner-detail-\(UUID().uuidString)")
         await client.clearOfflineData()
@@ -353,7 +393,7 @@ final class ShipyardKitTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer service-token")
             let queryItems = try Self.queryItems(request)
             XCTAssertEqual(queryItems["includePlanner"], "1")
-            XCTAssertEqual(queryItems["ws"], "judeworks")
+            XCTAssertEqual(queryItems["ws"], "acme-studio")
 
             let item = Self.requestObject(
                 id: "req_1",
@@ -410,7 +450,7 @@ final class ShipyardKitTests: XCTestCase {
 
         let detail = try await client.fetchProduct(
             slug: "atlas",
-            workspaceSlug: "judeworks",
+            workspaceSlug: "acme-studio",
             apiToken: "service-token"
         )
 
@@ -463,6 +503,36 @@ final class ShipyardKitTests: XCTestCase {
 
         XCTAssertEqual(product.workingVersion, "1.4.0")
         XCTAssertEqual(product.workingVersionProgress, 70)
+    }
+
+    func testCreateProductUsesServiceWriteTokenAndStatus() async throws {
+        let client = makeMockClient(productSlug: "create-product-\(UUID().uuidString)")
+        await client.clearOfflineData()
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/products")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer service-token")
+            XCTAssertEqual(try Self.queryItems(request)["ws"], "acme-studio")
+            let body = try Self.requestJSONBody(request)
+            XCTAssertEqual(body["name"] as? String, "Relay Notes")
+            XCTAssertEqual(body["status"] as? String, "beta")
+            XCTAssertEqual(body["workingVersion"] as? String, "1.0")
+            return try Self.jsonResponse(
+                for: request,
+                status: 201,
+                jsonObject: ["product": Self.productObject(id: "prod_new", name: "Relay Notes", slug: "relay-notes", workingVersion: "1.0", workingVersionStatus: "in_progress")]
+            )
+        }
+
+        let product = try await client.createProduct(
+            ShipyardProductInput(name: "Relay Notes", slug: "relay-notes", status: "beta", platforms: ["iphone", "ipad"], workingVersion: "1.0", workingVersionStatus: "in_progress", workingVersionProgress: 0),
+            workspaceSlug: "acme-studio",
+            apiToken: "service-token"
+        )
+
+        XCTAssertEqual(product.id, "prod_new")
+        XCTAssertEqual(product.slug, "relay-notes")
     }
 
     func testPlannerItemAndTaskServiceWritesUseExpectedPayloads() async throws {
@@ -1430,6 +1500,19 @@ final class ShipyardKitTests: XCTestCase {
                 "workingVersionStatus": workingVersionStatus as Any? ?? NSNull(),
                 "workingVersionProgress": workingVersionProgress
             ],
+            "appStore": [
+                "currentVersion": "1.3.2",
+                "currentVersionReleaseDate": "2026-06-01",
+                "currentVersionPostSlug": "atlas-1-3-2",
+                "currentReleaseNotesSummary": "Performance and reliability improvements.",
+                "versionHistoryCount": 8,
+                "versionHistoryPulledAt": "2026-06-07T12:00:00.000Z",
+                "lastSyncAt": "2026-06-07T12:00:00.000Z",
+                "trackId": "123456789",
+                "country": "us",
+                "reviewSubmittedAt": NSNull(),
+                "reviewFollowUpAt": NSNull()
+            ],
             "latestUpdateAt": NSNull(),
             "daysSinceLastUpdate": NSNull(),
             "updatePriority": [
@@ -1524,8 +1607,8 @@ final class ShipyardKitTests: XCTestCase {
         [
             "studio": [
                 "id": "studio_123",
-                "name": "JudeWorks",
-                "slug": "judeworks",
+                "name": "Acme Studio",
+                "slug": "acme-studio",
                 "reportingCurrency": "USD"
             ],
             "products": [

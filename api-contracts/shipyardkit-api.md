@@ -118,7 +118,7 @@ Returns:
 
 ## Service API: web analytics
 
-`GET /v1/analytics/web?ws=judeworks&hostname=www.judeworks.app&days=30`
+`GET /v1/analytics/web?ws=acme-studio&hostname=www.acme.example&days=30`
 
 This route is for authenticated admin tools and native dashboard apps. It does not use the mobile feedback session token.
 
@@ -143,7 +143,7 @@ The token must have `api:read`.
   "configured": true,
   "available": true,
   "error": null,
-  "hostname": "www.judeworks.app",
+  "hostname": "www.acme.example",
   "days": 30,
   "scope": {
     "type": "site"
@@ -169,11 +169,11 @@ The token must have `api:read`.
     }
   ],
   "allowedHostnames": [
-    "judeworks.app",
-    "www.judeworks.app",
-    "judeworks.startshipyard.com"
+    "acme.example",
+    "www.acme.example",
+    "acme-studio.startshipyard.com"
   ],
-  "selectedHostname": "www.judeworks.app",
+  "selectedHostname": "www.acme.example",
   "cached": false,
   "refreshedAt": "2026-06-07T12:00:00.000Z",
   "expiresAt": "2026-06-07T12:15:00.000Z"
@@ -190,7 +190,7 @@ Notes:
 
 ## Service API: App Store analytics
 
-`GET /v1/analytics?ws=judeworks&days=30&productId=prod_123&activity=download&view=day`
+`GET /v1/analytics?ws=acme-studio&days=30&productId=prod_123&activity=download&view=day`
 
 This route is for authenticated admin tools and native dashboard apps. It returns the same App Store Connect analytics payload used by the admin analytics dashboard. It does not use the mobile feedback session token.
 
@@ -222,7 +222,7 @@ The response includes:
 
 ## Service API: create App Store Bundle ID
 
-`POST /v1/analytics/app-store/bundle-ids?ws=judeworks`
+`POST /v1/analytics/app-store/bundle-ids?ws=acme-studio`
 
 Creates an explicit Bundle ID through the public App Store Connect API. This reserves the Bundle ID only; it does not claim the App Store app name.
 
@@ -240,7 +240,7 @@ The token must have `api:write`.
 
 ## Service API: start App Store analytics sync
 
-`POST /v1/analytics/sync?ws=judeworks`
+`POST /v1/analytics/sync?ws=acme-studio`
 
 This route queues missing App Store analytics dates for the selected workspace.
 
@@ -269,7 +269,7 @@ Reads require `api:read`. Writes require `api:write`.
 
 ### Product planning list
 
-`GET /v1/products?ws=judeworks&type=app&sort=update_priority_desc`
+`GET /v1/products?ws=acme-studio&type=app&sort=update_priority_desc`
 
 Important query params:
 
@@ -338,7 +338,7 @@ Success returns:
 
 ### Product detail with release planner
 
-`GET /v1/products/atlas?ws=judeworks&includePlanner=1`
+`GET /v1/products/atlas?ws=acme-studio&includePlanner=1`
 
 Optional enrichment query params:
 

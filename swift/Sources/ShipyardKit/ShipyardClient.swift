@@ -717,6 +717,20 @@ public struct ShipyardProductUpdatePriority: Codable, Sendable {
     public let basis: String?
 }
 
+public struct ShipyardAppStoreSummary: Codable, Sendable {
+    public let currentVersion: String?
+    public let currentVersionReleaseDate: String?
+    public let currentVersionPostSlug: String?
+    public let currentReleaseNotesSummary: String?
+    public let versionHistoryCount: Int?
+    public let versionHistoryPulledAt: String?
+    public let lastSyncAt: String?
+    public let trackId: String?
+    public let country: String?
+    public let reviewSubmittedAt: String?
+    public let reviewFollowUpAt: String?
+}
+
 public struct ShipyardProduct: Codable, Identifiable, Sendable {
     public let id: String
     public let name: String
@@ -736,6 +750,7 @@ public struct ShipyardProduct: Codable, Identifiable, Sendable {
     public let workingVersionStatus: String?
     public let workingVersionProgress: Int?
     public let planning: ShipyardProductPlanning?
+    public let appStore: ShipyardAppStoreSummary?
     public let latestUpdateAt: String?
     public let daysSinceLastUpdate: Int?
     public let updatePriority: ShipyardProductUpdatePriority?
@@ -759,6 +774,22 @@ public struct ShipyardProduct: Codable, Identifiable, Sendable {
 
 public struct ShipyardProductList: Codable, Sendable {
     public let products: [ShipyardProduct]
+}
+
+public struct ShipyardServiceAPIKey: Codable, Sendable {
+    public let id: String
+    public let name: String
+    public let scopes: [String]
+    public let allowedProductSlugs: [String]
+    public let status: String
+    public let expiresAt: String?
+    public let rotationRecommended: Bool
+}
+
+public struct ShipyardServiceAPIKeyStatus: Codable, Sendable {
+    public let ok: Bool
+    public let serverTime: String
+    public let apiKey: ShipyardServiceAPIKey
 }
 
 public struct ShipyardPlannerReleaseGroup: Codable, Identifiable, Sendable {
@@ -830,6 +861,47 @@ public struct ShipyardProductUpdate: Encodable, Sendable {
         self.workingVersionStatus = workingVersionStatus
         self.workingVersionProgress = workingVersionProgress
     }
+}
+
+public struct ShipyardProductInput: Encodable, Sendable {
+    public var name: String
+    public var slug: String?
+    public var type: String
+    public var description: String?
+    public var status: String?
+    public var visibility: String?
+    public var platforms: [String]?
+    public var workingVersion: String?
+    public var workingVersionStatus: String?
+    public var workingVersionProgress: Int?
+
+    public init(
+        name: String,
+        slug: String? = nil,
+        type: String = "app",
+        description: String? = nil,
+        status: String? = nil,
+        visibility: String? = "private",
+        platforms: [String]? = nil,
+        workingVersion: String? = nil,
+        workingVersionStatus: String? = nil,
+        workingVersionProgress: Int? = nil
+    ) {
+        self.name = name
+        self.slug = slug
+        self.type = type
+        self.description = description
+        self.status = status
+        self.visibility = visibility
+        self.platforms = platforms
+        self.workingVersion = workingVersion
+        self.workingVersionStatus = workingVersionStatus
+        self.workingVersionProgress = workingVersionProgress
+    }
+}
+
+public struct ShipyardProductIconUploadResult: Codable, Sendable {
+    public let product: ShipyardProduct
 }
 
 public struct ShipyardPlannerItemInput: Encodable, Sendable {
@@ -2043,6 +2115,29 @@ public final class ShipyardClient: @unchecked Sendable {
         }
     }
 
+    /// Verifies that a database-backed service key is valid for the requested workspace and
+    /// returns its granted scopes. Unlike product listing, this endpoint cannot succeed through
+    /// the public-read fallback, so native admin tools can use it as a connection check.
+    public func fetchCurrentServiceAPIKey(
+        workspaceSlug: String? = nil,
+        apiToken: String
+    ) async throws -> ShipyardServiceAPIKeyStatus {
+        let token = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw ShipyardError.missingToken }
+
+        let data = try await sendRequest(
+            path: "v1/settings/api-key/current",
+            method: "GET",
+            token: token,
+            queryItems: serviceQueryItems(workspaceSlug: workspaceSlug)
+        )
+        do {
+            return try decoder.decode(ShipyardServiceAPIKeyStatus.self, from: data)
+        } catch {
+            throw ShipyardError.decodingFailed
+        }
+    }
+
     public func fetchProduct(
         slug: String,
         includePlanner: Bool = true,
@@ -2093,6 +2188,62 @@ public final class ShipyardClient: @unchecked Sendable {
         )
         do {
             return try decoder.decode(ProductEnvelope.self, from: data).product
+        } catch {
+            throw ShipyardError.decodingFailed
+        }
+    }
+
+    public func createProduct(
+        _ input: ShipyardProductInput,
+        workspaceSlug: String? = nil,
+        apiToken: String
+    ) async throws -> ShipyardProduct {
+        let token = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw ShipyardError.missingToken }
+
+        let data = try await sendRequest(
+            path: "v1/products",
+            method: "POST",
+            token: token,
+            body: try encoder.encode(input),
+            queryItems: serviceQueryItems(workspaceSlug: workspaceSlug)
+        )
+        do {
+            return try decoder.decode(ProductEnvelope.self, from: data).product
+        } catch {
+            throw ShipyardError.decodingFailed
+        }
+    }
+
+    public func uploadProductIcon(
+        slug: String,
+        imageData: Data,
+        fileName: String,
+        mimeType: String,
+        platform: String = "ios",
+        workspaceSlug: String? = nil,
+        apiToken: String
+    ) async throws -> ShipyardProduct {
+        let token = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw ShipyardError.missingToken }
+        let boundary = "ShipyardKit-\(UUID().uuidString)"
+        var body = Data()
+        func append(_ value: String) { body.append(Data(value.utf8)) }
+        append("--\(boundary)\r\nContent-Disposition: form-data; name=\"platform\"\r\n\r\n\(platform)\r\n")
+        append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\nContent-Type: \(mimeType)\r\n\r\n")
+        body.append(imageData)
+        append("\r\n--\(boundary)--\r\n")
+
+        let data = try await sendRequest(
+            path: "v1/products/\(pathComponent(slug))/icon",
+            method: "POST",
+            token: token,
+            body: body,
+            queryItems: serviceQueryItems(workspaceSlug: workspaceSlug),
+            contentType: "multipart/form-data; boundary=\(boundary)"
+        )
+        do {
+            return try decoder.decode(ShipyardProductIconUploadResult.self, from: data).product
         } catch {
             throw ShipyardError.decodingFailed
         }
