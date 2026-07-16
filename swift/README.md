@@ -2,7 +2,7 @@
 
 `ShipyardKit` is the Swift package product developers add to Apple apps for daily Roadmap pull visibility, Announcements, Ask, and Roadmap flows backed by Shipyard. It also includes service-token APIs for native admin tools, including Mac planner apps.
 
-Current SDK version: `0.2.3`.
+Current SDK version: `0.2.4`.
 
 ## Install via Swift Package Manager
 
@@ -49,11 +49,12 @@ Before wiring the app, confirm the Shipyard product exists in the workspace and 
 21. Call `vote(itemId:unvote:)` for voting.
 22. Treat `ShipyardError.offlineQueued` as a successful local save. The SDK persists the write and automatically retries when the device is online again.
 
-## Upgrade From 0.2.2 To 0.2.3
+## Upgrade From 0.2.2 To 0.2.4
 
 - Replace passive lifecycle calls to `pullRoadmapDaily()`, `fetchEngagementUpdates()`, or `refreshCachedDataAndSyncQueuedWrites()` with `syncDaily()`.
 - Move Roadmap, Announcements, and Ask into separate rows under Support. Keep only Roadmap permanently visible.
 - Remove `force: true` from ordinary Roadmap opens.
+- No app-side continuity setup is required. ShipyardKit stores and exchanges the server-issued installation proof automatically.
 
 ## Upgrade From 0.2.0 To 0.2.1
 

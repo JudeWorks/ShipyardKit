@@ -13,7 +13,7 @@
   "platform": "ios",
   "appVersion": "1.0.2",
   "buildNumber": "102",
-  "shipyardKitVersion": "0.2.3",
+  "shipyardKitVersion": "0.2.4",
   "sessionReason": "roadmap_pull",
   "activityDate": "2026-05-13"
 }
@@ -25,6 +25,8 @@
 {
   "token": "shipyard_mobile_feedback....",
   "expiresAt": "2026-05-13T21:15:10.000Z",
+  "installationProof": null,
+  "telemetryTrust": "continuity_verified",
   "scopes": [
     "engagement:read_public_mobile",
     "engagement:respond_public_mobile",
@@ -37,12 +39,21 @@
     "platform": "ios",
     "appVersion": "1.0.2",
     "buildNumber": "102",
-    "shipyardKitVersion": "0.2.3"
+    "shipyardKitVersion": "0.2.4"
   }
 }
 ```
 
-ShipyardKit also sends `X-ShipyardKit-Version: 0.2.3` on SDK requests.
+ShipyardKit also sends `X-ShipyardKit-Version: 0.2.4` on SDK requests.
+
+On the first request for an installation, omit `installationProof`. The server
+returns an untrusted, read-only bootstrap session plus a one-time proof.
+ShipyardKit stores that proof with device-only Keychain accessibility and
+immediately repeats the session request with `installationProof`; the verified
+response returns `installationProof: null` and the normal public scopes. A
+never-verified installation may restart this bootstrap if an older SDK
+discarded its original proof, but a verified installation cannot rotate its
+proof by omitting it.
 
 `pullRoadmapDaily()` maps to this endpoint and then reads `GET /v1/requests`. The SDK sends `sessionReason: "roadmap_pull"` when it refreshes the mobile session for that daily read. Shipyard records one app/platform/version activity row per UTC day per install, so the site can show which apps are using the Roadmap pull without presenting it as a separate outbound signal.
 
@@ -230,7 +241,7 @@ Creates an explicit Bundle ID through the public App Store Connect API. This res
 
 `Authorization: Bearer <service_api_key>`
 
-The token must have `api:write`.
+The token must have `credentials:manage`.
 
 ### Body
 

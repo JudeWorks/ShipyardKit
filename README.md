@@ -4,7 +4,7 @@ ShipyardKit is the Swift package and setup bundle for adding Shipyard-powered an
 
 It also exposes service-token APIs for native admin tools, including a Mac planner surface that can list products, load release-grouped planner items, update working versions, manage internal planner items, and edit planning tasks.
 
-Current SDK version: `0.2.3`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
+Current SDK version: `0.2.4`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
 
 Zip and hand off the top-level `ShipyardKit/` folder. That folder is the complete distributable package for a developer or installer.
 
@@ -253,12 +253,13 @@ _ = try await client.createPlannerTask(
 )
 ```
 
-## Upgrade From 0.2.2 To 0.2.3
+## Upgrade From 0.2.2 To 0.2.4
 
 - Replace passive lifecycle calls to `pullRoadmapDaily()`, `fetchEngagementUpdates()`, or `refreshCachedDataAndSyncQueuedWrites()` with one `syncDaily()` call on launch and foreground resume.
 - Move the three ShipyardKit rows under Support. Keep Roadmap visible; render Announcements and Ask only when their current content exists.
 - Remove ordinary `force: true` Roadmap opens. Render cached content first and use normal `pullRoadmapDaily()` for the once-daily network read.
 - Leave all other Support features to the host app.
+- No app-side continuity setup is required. ShipyardKit stores and exchanges the server-issued installation proof automatically.
 
 ## Upgrade From 0.2.0 To 0.2.1
 
