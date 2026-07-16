@@ -1499,6 +1499,8 @@ public struct ShipyardDailySyncResult: Sendable {
 private struct SessionResponse: Codable {
     let token: String
     let expiresAt: String
+    let installationProof: String?
+    let telemetryTrust: String?
 }
 
 private struct ItemsEnvelope: Codable {
@@ -1890,6 +1892,9 @@ public enum ShipyardInstallationIdentifier {
     ) -> String {
         let defaultsKey = "shipyardkit_installation_id"
         if let existing = readKeychain(service: service, account: account), !existing.isEmpty {
+            // Upgrade legacy entries to device-only accessibility so device
+            // restore cannot clone a telemetry installation identity.
+            _ = writeKeychain(service: service, account: account, value: existing)
             return existing
         }
         if let fallback = userDefaults.string(forKey: defaultsKey), !fallback.isEmpty {
@@ -1902,6 +1907,29 @@ public enum ShipyardInstallationIdentifier {
             userDefaults.set(generated, forKey: defaultsKey)
         }
         return generated
+    }
+
+    static func continuityProof(baseURL: URL, productSlug: String) -> String? {
+        readKeychain(
+            service: "ShipyardKit.InstallationContinuity",
+            account: continuityProofAccount(baseURL: baseURL, productSlug: productSlug)
+        )
+    }
+
+    @discardableResult
+    static func storeContinuityProof(_ proof: String, baseURL: URL, productSlug: String) -> Bool {
+        let trimmed = proof.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("mfp_"), trimmed.count == 47 else { return false }
+        return writeKeychain(
+            service: "ShipyardKit.InstallationContinuity",
+            account: continuityProofAccount(baseURL: baseURL, productSlug: productSlug),
+            value: trimmed
+        )
+    }
+
+    private static func continuityProofAccount(baseURL: URL, productSlug: String) -> String {
+        let origin = baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return "\(origin)|\(productSlug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
     }
 
     private static func readKeychain(service: String, account: String) -> String? {
@@ -1930,13 +1958,13 @@ public enum ShipyardInstallationIdentifier {
         SecItemDelete(baseQuery as CFDictionary)
         var addQuery = baseQuery
         addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
     }
 }
 
 public final class ShipyardClient: @unchecked Sendable {
-    public static let sdkVersion = "0.2.3"
+    public static let sdkVersion = "0.2.4"
     public static let engagementReadCacheTTL: TimeInterval = 15 * 60
 
     public let baseURL: URL
@@ -3019,7 +3047,7 @@ public final class ShipyardClient: @unchecked Sendable {
         let defaultsKey = dailyRoadmapPullDefaultsKey()
         let checkInKey = dailyCheckInDefaultsKey()
         if userDefaults.string(forKey: defaultsKey) == dayKey {
-            // Migrate the pre-0.2.3 combined marker without repeating today's check-in.
+            // Migrate the older combined marker without repeating today's check-in.
             if userDefaults.string(forKey: checkInKey) != dayKey {
                 userDefaults.set(dayKey, forKey: checkInKey)
             }
@@ -3118,6 +3146,9 @@ public final class ShipyardClient: @unchecked Sendable {
         if let buildNumber = buildNumberProvider(), !buildNumber.isEmpty {
             body["buildNumber"] = buildNumber
         }
+        if let proof = ShipyardInstallationIdentifier.continuityProof(baseURL: baseURL, productSlug: productSlug) {
+            body["installationProof"] = proof
+        }
         guard let data = try? encoder.encode(body) else { return }
         await offlineWriteQueue.enqueue(
             scope: offlineScope,
@@ -3130,10 +3161,10 @@ public final class ShipyardClient: @unchecked Sendable {
     }
 
     public func refreshSession() async throws -> ShipyardSessionInfo {
-        try await refreshSession(reason: nil)
+        try await refreshSession(reason: nil, continuityUpgradeAttempted: false)
     }
 
-    private func refreshSession(reason: String?) async throws -> ShipyardSessionInfo {
+    private func refreshSession(reason: String?, continuityUpgradeAttempted: Bool = false) async throws -> ShipyardSessionInfo {
         let installationId = installationIdProvider().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !installationId.isEmpty else {
             throw ShipyardError.server("installationId is required", 400)
@@ -3154,6 +3185,9 @@ public final class ShipyardClient: @unchecked Sendable {
             }
             if let reason = reason?.trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty {
                 body["sessionReason"] = reason
+            }
+            if let proof = ShipyardInstallationIdentifier.continuityProof(baseURL: baseURL, productSlug: productSlug) {
+                body["installationProof"] = proof
             }
             return body
         }()
@@ -3190,6 +3224,14 @@ public final class ShipyardClient: @unchecked Sendable {
         }
         guard let expiresAtDate = ShipyardDateParser.date(from: decoded.expiresAt) else {
             throw ShipyardError.decodingFailed
+        }
+        if !continuityUpgradeAttempted,
+           decoded.telemetryTrust == "untrusted",
+           let proof = decoded.installationProof,
+           ShipyardInstallationIdentifier.storeContinuityProof(proof, baseURL: baseURL, productSlug: productSlug) {
+            // The bootstrap token cannot write or count toward aggregates.
+            // Exchange its server-issued proof immediately.
+            return try await refreshSession(reason: reason, continuityUpgradeAttempted: true)
         }
         await sessionStore.set(token: decoded.token, expiresAt: expiresAtDate)
         return ShipyardSessionInfo(token: decoded.token, expiresAt: expiresAtDate)

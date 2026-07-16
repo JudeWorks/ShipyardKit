@@ -2,12 +2,16 @@
 
 ## Unreleased
 
+## 0.2.4 — 2026-07-16
+
+- Added a server-issued, device-only installation continuity proof for mobile
+  sessions. ShipyardKit stores the proof in the Keychain and immediately
+  exchanges a bootstrap session for a continuity-verified session.
+- Added recovery for installations that received and discarded a bootstrap
+  proof before proof-capable ShipyardKit code was available.
 - Added a macOS-safe Swift package test helper that builds disposable XCTest
   artifacts outside downloaded and cloud-backed project folders, preventing
   intermittent Gatekeeper “damaged” alerts during installer verification.
-
-## 0.2.3 — 2026-07-09
-
 - Added `syncDaily()` as the standard lifecycle coordinator for one Roadmap,
   Engagement, queued-write, and check-in cycle per UTC calendar day.
 - Added `pullEngagementDaily()` and `cachedEngagementUpdates()` so

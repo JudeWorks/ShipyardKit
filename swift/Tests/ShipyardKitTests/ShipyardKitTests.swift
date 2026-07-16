@@ -68,6 +68,50 @@ final class ShipyardKitTests: XCTestCase {
         _ = try await client.refreshSession()
     }
 
+    func testSessionBootstrapStoresAndImmediatelyExchangesContinuityProof() async throws {
+        let productSlug = "continuity-proof-\(UUID().uuidString)"
+        let client = makeMockClient(productSlug: productSlug)
+        await client.clearOfflineData()
+        let proof = "mfp_\(String(repeating: "A", count: 43))"
+        var requestCount = 0
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            requestCount += 1
+            let body = try Self.requestJSONBody(request)
+            if requestCount == 1 {
+                XCTAssertNil(body["installationProof"])
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 201,
+                    jsonObject: [
+                        "token": "bootstrap-token",
+                        "expiresAt": "2099-01-01T00:00:00Z",
+                        "installationProof": proof,
+                        "telemetryTrust": "untrusted"
+                    ]
+                )
+            }
+
+            XCTAssertEqual(requestCount, 2)
+            XCTAssertEqual(body["installationProof"] as? String, proof)
+            return try Self.jsonResponse(
+                for: request,
+                status: 201,
+                jsonObject: [
+                    "token": "verified-token",
+                    "expiresAt": "2099-01-01T00:00:00Z",
+                    "installationProof": NSNull(),
+                    "telemetryTrust": "continuity_verified"
+                ]
+            )
+        }
+
+        let session = try await client.refreshSession()
+
+        XCTAssertEqual(session.token, "verified-token")
+        XCTAssertEqual(requestCount, 2)
+    }
+
     func testFetchSiteAnalyticsUsesServiceApiTokenAndDecodesHostnames() async throws {
         let productSlug = "site-analytics-\(UUID().uuidString)"
         let client = makeMockClient(productSlug: productSlug)
