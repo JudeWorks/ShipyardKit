@@ -13,7 +13,8 @@
   "platform": "ios",
   "appVersion": "1.0.2",
   "buildNumber": "102",
-  "shipyardKitVersion": "0.2.4",
+  "shipyardKitVersion": "0.25.0",
+  "runtimeEnvironment": "physical_device",
   "sessionReason": "roadmap_pull",
   "activityDate": "2026-05-13"
 }
@@ -39,12 +40,13 @@
     "platform": "ios",
     "appVersion": "1.0.2",
     "buildNumber": "102",
-    "shipyardKitVersion": "0.2.4"
+    "shipyardKitVersion": "0.25.0",
+    "runtimeEnvironment": "physical_device"
   }
 }
 ```
 
-ShipyardKit also sends `X-ShipyardKit-Version: 0.2.4` on SDK requests.
+ShipyardKit also sends `X-ShipyardKit-Version: 0.25.0` on SDK requests. `runtimeEnvironment` is compile-time metadata with supported values `simulator` and `physical_device`; legacy or unsupported values are stored as `unknown`. Simulator activity is retained for diagnostics and excluded from Active Devices and primary Device Activity metrics.
 
 On the first request for an installation, omit `installationProof`. The server
 returns an untrusted, read-only bootstrap session plus a one-time proof.
@@ -57,7 +59,7 @@ proof by omitting it.
 
 `pullRoadmapDaily()` maps to this endpoint and then reads `GET /v1/requests`. The SDK sends `sessionReason: "roadmap_pull"` when it refreshes the mobile session for that daily read. Shipyard records one app/platform/version activity row per UTC day per install, so the site can show which apps are using the Roadmap pull without presenting it as a separate outbound signal.
 
-`activityDate` (optional, `YYYY-MM-DD`, UTC) lets a device deliver a check-in late — for example when the only app open of a day happened offline and the SDK queued it. The server accepts dates up to 2 days in the past; anything missing, invalid, in the future, or older falls back to the server’s current UTC day. The daily activity row is recorded once per install per UTC day regardless (`pullCount` on that row counts session refreshes for the day, not roadmap fetches).
+`activityDate` (optional, `YYYY-MM-DD`, UTC) lets a device deliver a Device Activity Event late — for example when the only app open of a day happened offline and the SDK queued it. The server accepts dates up to 2 days in the past; anything missing, invalid, in the future, or older falls back to the server’s current UTC day. The daily activity row is recorded once per install per UTC day regardless (`pullCount` on that row counts session refreshes for the day, not roadmap fetches).
 
 The target product must be an app product, but it does not need to be live. ShipyardKit mobile sessions work for app products in any product status.
 
@@ -459,9 +461,9 @@ Returns:
     {
       "id": "ask_123",
       "title": "How satisfied are you with Atlas sync speed?",
-      "promptType": "star_rating",
+      "askType": "star_rating",
       "status": "live",
-      "resultsVisibility": "show_after_vote",
+      "resultsVisibility": "show_after_response",
       "minRating": 1,
       "maxRating": 5,
       "startsAt": "2026-05-20T18:00:00.000Z",
@@ -515,13 +517,9 @@ Notes:
 
 ### Success (200)
 
-Returns `{ "asks": [{ ... }] }`. Legacy response keys remain for older SDK clients.
+Returns `{ "asks": [{ ... }] }`.
 
 `fetchAsks()` maps to this endpoint.
-
-Compatibility alias:
-
-- `GET /v1/engagement/prompts?product=atlas`
 
 ## 4) Public announcements only
 
@@ -596,13 +594,9 @@ Notes:
 
 - Shipyard stores one current response per install for each Ask.
 - Re-sending a response updates the same install's answer.
-- Mobile UI should branch on `promptType` or ShipyardKit's `ask.type` helper and support all current values: `single_choice`, `multi_choice`, `star_rating`, `numeric_rating`, and `open_text`.
+- Mobile UI should branch on `askType` or ShipyardKit's `ask.type` helper and support all current values: `single_choice`, `multi_choice`, `star_rating`, `numeric_rating`, and `open_text`.
 - For `multi_choice`, respect `maxSelections` when it is present.
 - `respondToAsk(...)` maps to this endpoint.
-
-Compatibility alias:
-
-- `POST /v1/engagement/prompts/:id/respond`
 
 ## 6) Record announcement event
 
@@ -681,7 +675,7 @@ Each request may include roadmap release fields:
 
 ShipyardKit exposes both raw and presentation-ready reads:
 
-- `syncDaily()` coordinates queued writes, the once-daily Roadmap pull/check-in, and the once-daily Engagement pull. It returns cached content on repeated same-day calls and retries incomplete content later without repeating the check-in.
+- `syncDaily()` coordinates queued writes, the once-daily Roadmap pull/Device Activity Event, and the once-daily Engagement pull. It returns cached content on repeated same-day calls and retries incomplete content later without repeating the Device Activity Event.
 - `pullEngagementDaily()` performs only the once-daily Announcements/Ask pull.
 - `cachedEngagementUpdates()` reads the last stored Announcements and Ask data without network access.
 - `fetchItems()` returns the API items.
