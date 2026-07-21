@@ -14,7 +14,7 @@
     "appVersionSource": "CFBundleShortVersionString",
     "buildNumberSource": "CFBundleVersion",
     "shipyardKitVersionSource": "ShipyardClient.sdkVersion",
-    "dailySync": "Call client.syncDaily() on launch and foreground resume. It coordinates Roadmap, Engagement, queued writes, and the daily check-in once per UTC day, with same-day retry for incomplete content.",
+    "dailySync": "Call client.syncDaily() on launch and foreground resume. It coordinates Roadmap, Engagement, queued writes, and Device Activity once per UTC day, with same-day retry for incomplete content.",
     "roadmapOpenRefresh": "When the user opens Roadmap, render cachedItems() immediately if available, then call normal pullRoadmapDaily() and update the visible Roadmap only when fresh content is returned. Do not use force: true for ordinary opens.",
     "roadmapPageFormat": "Roadmap should open as a page in Settings or the nearest equivalent app area. It should let users submit Feature or Bug Fix requests, list active public items in their current status, and use an actual tappable upvote button on each item.",
     "roadmapVoteButtonStyle": "Style unvoted upvote buttons with a quieter/duller treatment from the app theme and voted upvote buttons with a stronger/bolder treatment from the app theme.",

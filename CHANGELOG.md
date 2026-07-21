@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.25.0 — 2026-07-20
+
+- Standardized the public engagement model on `ShipyardAsk`, `ShipyardAskType`,
+  `ShipyardAskOption`, `ShipyardAskResponse`, `fetchAsks()`, and
+  `respondToAsk(...)`.
+- Removed CheckIn- and Prompt-named SDK compatibility APIs. Previously shipped
+  builds can still complete pulls through server-side empty compatibility
+  responses, but ShipyardKit 0.25.0 uses only the canonical Ask contract.
+- Renamed Ask option totals from votes to selections so they cannot be confused
+  with Roadmap votes.
+- Standardized passive SDK telemetry language on Device Activity, including
+  Device Activity Events, Active Devices, Daily Active Devices, and Last Device
+  Activity.
+- Removed deprecated daily active-device ping/check-in helpers. `syncDaily()` is
+  the lifecycle coordinator and `pullRoadmapDaily()` remains the explicit
+  Roadmap read.
+
+## 0.2.5 — 2026-07-20
+
+- Added compile-time Simulator detection to every mobile session and queued
+  daily activity report. ShipyardKit now reports `runtimeEnvironment` as either
+  `simulator` or `physical_device` without changing the opaque installation id.
+- Simulator activity can now be stored for diagnostics while remaining
+  excluded from Active Devices and production analytics totals.
+
 ## 0.2.4 — 2026-07-16
 
 - Added a server-issued, device-only installation continuity proof for mobile

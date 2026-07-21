@@ -45,6 +45,10 @@ final class ShipyardKitTests: XCTestCase {
         XCTAssertFalse(ShipyardClient.inferredPlatform().isEmpty)
     }
 
+    func testInferredRuntimeEnvironmentIsSupported() {
+        XCTAssertTrue(["simulator", "physical_device"].contains(ShipyardClient.inferredRuntimeEnvironment()))
+    }
+
     func testSDKVersionIsSentWithSessionRequests() async throws {
         let productSlug = "sdk-version-\(UUID().uuidString)"
         let client = makeMockClient(productSlug: productSlug)
@@ -56,6 +60,7 @@ final class ShipyardKitTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "ShipyardKit/\(ShipyardClient.sdkVersion)")
             let body = try Self.requestJSONBody(request)
             XCTAssertEqual(body["shipyardKitVersion"] as? String, ShipyardClient.sdkVersion)
+            XCTAssertEqual(body["runtimeEnvironment"] as? String, ShipyardClient.inferredRuntimeEnvironment())
             XCTAssertEqual(body["appVersion"] as? String, "1.0")
             XCTAssertEqual(body["buildNumber"] as? String, "1")
             return try Self.jsonResponse(
@@ -787,6 +792,7 @@ final class ShipyardKitTests: XCTestCase {
                 XCTAssertEqual(body["appVersion"] as? String, "1.0")
                 XCTAssertEqual(body["buildNumber"] as? String, "1")
                 XCTAssertEqual(body["shipyardKitVersion"] as? String, ShipyardClient.sdkVersion)
+                XCTAssertEqual(body["runtimeEnvironment"] as? String, ShipyardClient.inferredRuntimeEnvironment())
                 XCTAssertEqual(body["sessionReason"] as? String, "roadmap_pull")
                 return try Self.jsonResponse(
                     for: request,
@@ -805,13 +811,12 @@ final class ShipyardKitTests: XCTestCase {
                 if engagementRequestCount == 1 {
                     throw URLError(.notConnectedToInternet)
                 }
-                let ask = Self.promptObject(id: "ask_daily_sync", promptType: "open_text")
+                let ask = Self.askObject(id: "ask_daily_sync", askType: "open_text")
                 return try Self.jsonResponse(
                     for: request,
                     status: 200,
                     jsonObject: [
                         "asks": [ask],
-                        "prompts": [ask],
                         "announcements": [],
                         "refreshedAt": "2026-05-28T20:30:00.000Z"
                     ]
@@ -836,7 +841,7 @@ final class ShipyardKitTests: XCTestCase {
         XCTAssertEqual(engagementRequestCount, 2)
     }
 
-    func testOfflineDailySyncRetriesContentWithoutDuplicatingRoadmapCheckIn() async throws {
+    func testOfflineDailySyncRetriesContentWithoutDuplicatingRoadmapDeviceActivity() async throws {
         let productSlug = "offline-daily-sync-\(UUID().uuidString)"
         let client = makeMockClient(productSlug: productSlug)
         await client.clearOfflineData()
@@ -845,7 +850,7 @@ final class ShipyardKitTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         let date = Date(timeIntervalSince1970: 1_779_811_200)
         var isOnline = false
-        var roadmapCheckInCount = 0
+        var roadmapDeviceActivityCount = 0
         var sessionWithoutReasonCount = 0
         var roadmapRequestCount = 0
         var engagementRequestCount = 0
@@ -856,8 +861,9 @@ final class ShipyardKitTests: XCTestCase {
             case "/v1/auth/mobile/public-session":
                 let body = try Self.requestJSONBody(request)
                 if body["sessionReason"] as? String == "roadmap_pull" {
-                    roadmapCheckInCount += 1
+                    roadmapDeviceActivityCount += 1
                     XCTAssertNotNil(body["activityDate"] as? String)
+                    XCTAssertEqual(body["runtimeEnvironment"] as? String, ShipyardClient.inferredRuntimeEnvironment())
                 } else {
                     sessionWithoutReasonCount += 1
                 }
@@ -874,7 +880,7 @@ final class ShipyardKitTests: XCTestCase {
                 return try Self.jsonResponse(
                     for: request,
                     status: 200,
-                    body: #"{"asks":[],"prompts":[],"announcements":[],"refreshedAt":"2026-05-28T20:30:00.000Z"}"#
+                    body: #"{"asks":[],"announcements":[],"refreshedAt":"2026-05-28T20:30:00.000Z"}"#
                 )
             default:
                 return try Self.jsonResponse(for: request, status: 404, body: #"{"error":"not found"}"#)
@@ -892,7 +898,7 @@ final class ShipyardKitTests: XCTestCase {
 
         XCTAssertTrue(recovered.isComplete)
         XCTAssertEqual(queuedAfterRecovery, 0)
-        XCTAssertEqual(roadmapCheckInCount, 1)
+        XCTAssertEqual(roadmapDeviceActivityCount, 1)
         XCTAssertEqual(sessionWithoutReasonCount, 1)
         XCTAssertEqual(roadmapRequestCount, 1)
         XCTAssertEqual(engagementRequestCount, 1)
@@ -912,13 +918,12 @@ final class ShipyardKitTests: XCTestCase {
                     body: #"{"token":"test-token","expiresAt":"2099-01-01T00:00:00Z"}"#
                 )
             case "/v1/engagement/asks":
-                let ask = Self.promptObject(id: "ask_1", promptType: "open_text")
+                let ask = Self.askObject(id: "ask_1", askType: "open_text")
                 return try Self.jsonResponse(
                     for: request,
                     status: 200,
                     jsonObject: [
-                        "asks": [ask],
-                        "prompts": [ask]
+                        "asks": [ask]
                     ]
                 )
             default:
@@ -1047,18 +1052,18 @@ final class ShipyardKitTests: XCTestCase {
     }
 
     func testAskTypeHelpersCoverAllSupportedTypes() {
-        XCTAssertEqual(ShipyardPromptType.allCases.map(\.rawValue), [
+        XCTAssertEqual(ShipyardAskType.allCases.map(\.rawValue), [
             "single_choice",
             "multi_choice",
             "star_rating",
             "numeric_rating",
             "open_text"
         ])
-        XCTAssertTrue(ShipyardPromptType.singleChoice.usesOptions)
-        XCTAssertTrue(ShipyardPromptType.multiChoice.allowsMultipleOptions)
-        XCTAssertEqual(ShipyardPromptType.starRating.ratingRange, 1...5)
-        XCTAssertEqual(ShipyardPromptType.numericRating.ratingRange, 1...10)
-        XCTAssertFalse(ShipyardPromptType.openText.usesRating)
+        XCTAssertTrue(ShipyardAskType.singleChoice.usesOptions)
+        XCTAssertTrue(ShipyardAskType.multiChoice.allowsMultipleOptions)
+        XCTAssertEqual(ShipyardAskType.starRating.ratingRange, 1...5)
+        XCTAssertEqual(ShipyardAskType.numericRating.ratingRange, 1...10)
+        XCTAssertFalse(ShipyardAskType.openText.usesRating)
     }
 
     func testFetchEngagementUpdatesDecodesAsksAndAnnouncements() async throws {
@@ -1077,14 +1082,13 @@ final class ShipyardKitTests: XCTestCase {
             case "/v1/engagement/updates":
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
                 XCTAssertEqual(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "product" })?.value, productSlug)
-                let ask = Self.promptObject(id: "prompt_rating", promptType: "star_rating")
+                let ask = Self.askObject(id: "ask_rating", askType: "star_rating")
                 let announcement = Self.announcementObject(id: "ann_1")
                 return try Self.jsonResponse(
                     for: request,
                     status: 200,
                     jsonObject: [
                         "asks": [ask],
-                        "prompts": [ask],
                         "announcements": [announcement],
                         "refreshedAt": "2026-05-28T20:30:00.000Z"
                     ]
@@ -1096,7 +1100,7 @@ final class ShipyardKitTests: XCTestCase {
 
         let updates = try await client.fetchEngagementUpdates()
 
-        XCTAssertEqual(updates.asks.map(\.id), ["prompt_rating"])
+        XCTAssertEqual(updates.asks.map(\.id), ["ask_rating"])
         XCTAssertEqual(updates.asks.first?.type, .starRating)
         XCTAssertEqual(updates.asks.first?.ratingRange, 1...5)
         XCTAssertEqual(updates.announcements.map(\.id), ["ann_1"])
@@ -1122,13 +1126,12 @@ final class ShipyardKitTests: XCTestCase {
                 )
             case "/v1/engagement/updates":
                 updatesRequestCount += 1
-                let ask = Self.promptObject(id: "prompt_cached", promptType: "single_choice")
+                let ask = Self.askObject(id: "ask_cached", askType: "single_choice")
                 return try Self.jsonResponse(
                     for: request,
                     status: 200,
                     jsonObject: [
                         "asks": [ask],
-                        "prompts": [ask],
                         "announcements": [],
                         "refreshedAt": "2026-06-04T08:00:00.000Z"
                     ]
@@ -1142,9 +1145,9 @@ final class ShipyardKitTests: XCTestCase {
         let second = try await client.fetchEngagementUpdates()
         let forced = try await client.fetchEngagementUpdates(cachePolicy: .reloadIgnoringCache)
 
-        XCTAssertEqual(first.asks.map(\.id), ["prompt_cached"])
-        XCTAssertEqual(second.asks.map(\.id), ["prompt_cached"])
-        XCTAssertEqual(forced.asks.map(\.id), ["prompt_cached"])
+        XCTAssertEqual(first.asks.map(\.id), ["ask_cached"])
+        XCTAssertEqual(second.asks.map(\.id), ["ask_cached"])
+        XCTAssertEqual(forced.asks.map(\.id), ["ask_cached"])
         XCTAssertEqual(sessionRequestCount, 1)
         XCTAssertEqual(updatesRequestCount, 2)
     }
@@ -1162,44 +1165,44 @@ final class ShipyardKitTests: XCTestCase {
                     status: 201,
                     body: #"{"token":"test-token","expiresAt":"2099-01-01T00:00:00Z"}"#
                 )
-            case "/v1/engagement/asks/prompt_single/respond":
+            case "/v1/engagement/asks/ask_single/respond":
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
                 let body = try Self.requestJSONBody(request)
                 XCTAssertEqual(body["optionId"] as? String, "opt_1")
                 XCTAssertNil(body["optionIds"])
-                let prompt = Self.promptObject(id: "prompt_single", promptType: "single_choice")
-                return try Self.promptResponse(for: request, prompt: prompt)
-            case "/v1/engagement/asks/prompt_multi/respond":
+                let ask = Self.askObject(id: "ask_single", askType: "single_choice")
+                return try Self.askResponse(for: request, ask: ask)
+            case "/v1/engagement/asks/ask_multi/respond":
                 let body = try Self.requestJSONBody(request)
                 XCTAssertEqual(body["optionIds"] as? [String], ["opt_1", "opt_2"])
                 XCTAssertNil(body["optionId"])
-                let prompt = Self.promptObject(id: "prompt_multi", promptType: "multi_choice")
-                return try Self.promptResponse(for: request, prompt: prompt)
-            case "/v1/engagement/asks/prompt_star/respond":
+                let ask = Self.askObject(id: "ask_multi", askType: "multi_choice")
+                return try Self.askResponse(for: request, ask: ask)
+            case "/v1/engagement/asks/ask_star/respond":
                 let body = try Self.requestJSONBody(request)
                 XCTAssertEqual(body["ratingValue"] as? Int, 5)
-                let prompt = Self.promptObject(id: "prompt_star", promptType: "star_rating")
-                return try Self.promptResponse(for: request, prompt: prompt)
-            case "/v1/engagement/asks/prompt_numeric/respond":
+                let ask = Self.askObject(id: "ask_star", askType: "star_rating")
+                return try Self.askResponse(for: request, ask: ask)
+            case "/v1/engagement/asks/ask_numeric/respond":
                 let body = try Self.requestJSONBody(request)
                 XCTAssertEqual(body["ratingValue"] as? Int, 8)
-                let prompt = Self.promptObject(id: "prompt_numeric", promptType: "numeric_rating")
-                return try Self.promptResponse(for: request, prompt: prompt)
-            case "/v1/engagement/asks/prompt_text/respond":
+                let ask = Self.askObject(id: "ask_numeric", askType: "numeric_rating")
+                return try Self.askResponse(for: request, ask: ask)
+            case "/v1/engagement/asks/ask_text/respond":
                 let body = try Self.requestJSONBody(request)
                 XCTAssertEqual(body["responseText"] as? String, "Works well")
-                let prompt = Self.promptObject(id: "prompt_text", promptType: "open_text")
-                return try Self.promptResponse(for: request, prompt: prompt)
+                let ask = Self.askObject(id: "ask_text", askType: "open_text")
+                return try Self.askResponse(for: request, ask: ask)
             default:
                 return try Self.jsonResponse(for: request, status: 404, body: #"{"error":"not found"}"#)
             }
         }
 
-        _ = try await client.respondToAsk(askId: "prompt_single", optionId: "opt_1")
-        _ = try await client.respondToAsk(askId: "prompt_multi", optionIds: ["opt_1", "opt_2"])
-        _ = try await client.respondToAsk(askId: "prompt_star", ratingValue: 5)
-        _ = try await client.respondToAsk(askId: "prompt_numeric", ratingValue: 8)
-        _ = try await client.respondToAsk(askId: "prompt_text", responseText: "  Works well  ")
+        _ = try await client.respondToAsk(askId: "ask_single", optionId: "opt_1")
+        _ = try await client.respondToAsk(askId: "ask_multi", optionIds: ["opt_1", "opt_2"])
+        _ = try await client.respondToAsk(askId: "ask_star", ratingValue: 5)
+        _ = try await client.respondToAsk(askId: "ask_numeric", ratingValue: 8)
+        _ = try await client.respondToAsk(askId: "ask_text", responseText: "  Works well  ")
     }
 
     func testAnnouncementEventsSendLifecyclePayloads() async throws {
@@ -1472,40 +1475,39 @@ final class ShipyardKitTests: XCTestCase {
         return Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
     }
 
-    private static func promptResponse(
+    private static func askResponse(
         for request: URLRequest,
-        prompt: [String: Any]
+        ask: [String: Any]
     ) throws -> (HTTPURLResponse, Data) {
         try jsonResponse(
             for: request,
             status: 200,
             jsonObject: [
                 "ok": true,
-                "ask": prompt,
-                "prompt": prompt
+                "ask": ask
             ]
         )
     }
 
-    private static func promptObject(id: String, promptType: String) -> [String: Any] {
+    private static func askObject(id: String, askType: String) -> [String: Any] {
         [
             "id": id,
             "title": "How is this working?",
             "description": NSNull(),
-            "promptType": promptType,
+            "askType": askType,
             "status": "live",
-            "resultsVisibility": "show_after_vote",
+            "resultsVisibility": "show_after_response",
             "minRating": 1,
-            "maxRating": promptType == "numeric_rating" ? 10 : 5,
-            "maxSelections": promptType == "multi_choice" ? 2 : NSNull(),
+            "maxRating": askType == "numeric_rating" ? 10 : 5,
+            "maxSelections": askType == "multi_choice" ? 2 : NSNull(),
             "startsAt": NSNull(),
             "endsAt": NSNull(),
             "state": "live",
             "responseCount": 1,
             "averageRating": NSNull(),
             "options": [
-                ["id": "opt_1", "label": "First", "value": "first", "sortOrder": 0, "voteCount": NSNull()],
-                ["id": "opt_2", "label": "Second", "value": "second", "sortOrder": 1, "voteCount": NSNull()]
+                ["id": "opt_1", "label": "First", "value": "first", "sortOrder": 0, "selectionCount": NSNull()],
+                ["id": "opt_2", "label": "Second", "value": "second", "sortOrder": 1, "selectionCount": NSNull()]
             ],
             "myResponse": NSNull(),
             "resultsVisible": false

@@ -4,7 +4,7 @@ ShipyardKit is the Swift package and setup bundle for adding Shipyard-powered an
 
 It also exposes service-token APIs for native admin tools, including a Mac planner surface that can list products, load release-grouped planner items, update working versions, manage internal planner items, and edit planning tasks.
 
-Current SDK version: `0.2.4`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
+Current SDK version: `0.25.0`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
 
 Zip and hand off the top-level `ShipyardKit/` folder. That folder is the complete distributable package for a developer or installer.
 
@@ -38,7 +38,7 @@ Use the three-row Support pattern by default, styled with the host app's existin
 ## What ShipyardKit does
 
 - Mints short-lived, scoped end-user tokens from Shipyard.
-- Coordinates one successful Roadmap, Engagement, queued-write, and check-in cycle per UTC day when the app calls `syncDaily()`, so Shipyard can show which apps, platforms, app versions, and SDK versions use the integration.
+- Coordinates one successful Roadmap, Engagement, queued-write, and Device Activity Event cycle per UTC day when the app calls `syncDaily()`, so Shipyard can show which apps, platforms, app versions, and SDK versions use the integration.
 - Submits roadmap suggestions as `waiting_review` so admins can moderate before publishing.
 - Lets users submit roadmap suggestions as `feature` or `bugfix`.
 - Reads cached public Roadmap items for immediate display and refreshes them in the background when users open Roadmap.
@@ -133,14 +133,15 @@ Before installing, collect:
 7. Instantiate `ShipyardClient` with your Shipyard workspace URL, product slug, and installation id provider. ShipyardKit infers the Apple platform automatically unless you explicitly override it.
    - ShipyardKit automatically includes app version (`CFBundleShortVersionString`) and build number (`CFBundleVersion`) in mobile session payloads unless you override providers.
    - ShipyardKit also sends `ShipyardClient.sdkVersion` as `shipyardKitVersion` and `X-ShipyardKit-Version`.
+   - ShipyardKit reports `runtimeEnvironment` as `simulator` or `physical_device` at compile time. Simulator activity remains diagnostic and does not count toward Active Devices.
 8. Add three separate ShipyardKit rows under Support: Roadmap, Announcements, and Ask. Roadmap is always visible. Announcements and Ask stay hidden unless Shipyard returns current displayable content for that row. Other Support features remain app-owned.
 9. For Apple TV/tvOS apps, wire only `pullRoadmapDaily()` by default and do not add visible Shipyard UI unless the admin instructions explicitly request it.
 10. Roadmap suggestions are only for `Feature` and `Bug Fix`.
 11. Choose the roadmap layout:
     - Status roadmap: call `fetchItems().shipyardGroupedByStatus()` to show Open, Planned, In Progress, Shipped, and Closed groups. Items inside each group are sorted by upvotes.
     - Type sections: call `fetchItemCategories()` only if the app specifically wants Feature and Bug Fix sections.
-12. Call `syncDaily()` from app launch and foreground resume. It coordinates queued writes, the Roadmap pull/daily check-in, and the Announcements/Ask Engagement pull at most once per UTC calendar day. Failed content reads remain incomplete so a later lifecycle event that day can retry without duplicating the check-in.
-13. When the user opens Roadmap, render `cachedItems()` immediately and call normal `pullRoadmapDaily()` in the background. Do not use `force: true` for ordinary opens; same-day calls return without another pull or check-in.
+12. Call `syncDaily()` from app launch and foreground resume. It coordinates queued writes, the Roadmap pull/Device Activity Event, and the Announcements/Ask Engagement pull at most once per UTC calendar day. Failed content reads remain incomplete so a later lifecycle event that day can retry without duplicating the Device Activity Event.
+13. When the user opens Roadmap, render `cachedItems()` immediately and call normal `pullRoadmapDaily()` in the background. Do not use `force: true` for ordinary opens; same-day calls return without another pull or Device Activity Event.
 14. Use the `engagementUpdates` returned by `syncDaily()` or `cachedEngagementUpdates()` to decide whether the conditional Announcements and Ask rows should be visible.
 15. If the app shows Ask UI, branch on `ask.type` and support every current type:
     - `.singleChoice`: submit one option id.
@@ -253,6 +254,24 @@ _ = try await client.createPlannerTask(
 )
 ```
 
+## Upgrade From 0.2.5 To 0.25.0
+
+- Replace `ShipyardPrompt*` and `ShipyardCheckIn*` types with the canonical
+  `ShipyardAsk*` types.
+- Use `fetchAsks()` and `respondToAsk(...)`; the old Prompt- and CheckIn-named
+  methods are no longer part of the SDK.
+- Decode Ask option totals from `selectionCount`, not `voteCount`. Roadmap
+  voting remains unchanged.
+- Keep `syncDaily()` as the lifecycle coordinator. Its passive telemetry is
+  Device Activity; no extra Active Devices call is required.
+
+## Upgrade From 0.2.4 To 0.2.5
+
+- No integration change is required. ShipyardKit automatically reports
+  Simulator versus physical-device runtime metadata with session activity.
+- Existing activity remains `unknown`; only activity from 0.2.5 and newer can
+  be classified and excluded as Simulator traffic.
+
 ## Upgrade From 0.2.2 To 0.2.4
 
 - Replace passive lifecycle calls to `pullRoadmapDaily()`, `fetchEngagementUpdates()`, or `refreshCachedDataAndSyncQueuedWrites()` with one `syncDaily()` call on launch and foreground resume.
@@ -268,7 +287,7 @@ For existing integrations, update `ShipyardKit/swift`, `VERSION`, and `CHANGELOG
 - Replace deprecated lifecycle calls and repeated Engagement refreshes with `syncDaily()` on launch and foreground resume.
 - Update visible Roadmap screens to render `cachedItems()` first, then run normal `pullRoadmapDaily()` and refresh the visible groups only when it returns fresh content.
 - Prefer `fetchAsks()` and `respondToAsk(...)` for Ask UI.
-- Read `dailyRoadmapPullRows` and `dailyRoadmapInstallCount` in site/admin usage summaries when available.
+- Read `deviceActivityDays`, `deviceActivityEvents`, and `activeDevicesAllTime` in site/admin usage summaries when available.
 - Replace local references to `APPLE_TV_DAILY_ACTIVE_SETUP.md` with `APPLE_TV_ROADMAP_PULL_SETUP.md`.
 
 ## Installer Guide

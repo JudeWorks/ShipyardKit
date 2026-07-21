@@ -53,6 +53,11 @@ public struct ShipyardItem: Codable, Identifiable, Sendable {
     public let developerResponse: String?
     public let developerResponsePublic: Bool?
     public let developerRespondedAt: String?
+    public let aiWorkStatus: String?
+    public let aiWorkContext: String?
+    public let aiWorkStatusUpdatedAt: String?
+    public let aiClarificationRequest: String?
+    public let aiClarificationRequestedAt: String?
     public let linkedPostId: String?
     public let sortOrder: Int?
     public let createdAt: String?
@@ -77,6 +82,11 @@ public struct ShipyardItem: Codable, Identifiable, Sendable {
         developerResponse: String? = nil,
         developerResponsePublic: Bool? = nil,
         developerRespondedAt: String? = nil,
+        aiWorkStatus: String? = nil,
+        aiWorkContext: String? = nil,
+        aiWorkStatusUpdatedAt: String? = nil,
+        aiClarificationRequest: String? = nil,
+        aiClarificationRequestedAt: String? = nil,
         linkedPostId: String? = nil,
         sortOrder: Int? = nil,
         createdAt: String? = nil,
@@ -100,6 +110,11 @@ public struct ShipyardItem: Codable, Identifiable, Sendable {
         self.developerResponse = developerResponse
         self.developerResponsePublic = developerResponsePublic
         self.developerRespondedAt = developerRespondedAt
+        self.aiWorkStatus = aiWorkStatus
+        self.aiWorkContext = aiWorkContext
+        self.aiWorkStatusUpdatedAt = aiWorkStatusUpdatedAt
+        self.aiClarificationRequest = aiClarificationRequest
+        self.aiClarificationRequestedAt = aiClarificationRequestedAt
         self.linkedPostId = linkedPostId
         self.sortOrder = sortOrder
         self.createdAt = createdAt
@@ -979,6 +994,9 @@ public struct ShipyardPlannerItemUpdate: Encodable, Sendable {
     public var productName: String?
     public var productSlugHint: String?
     public var linkedPostId: String?
+    public var aiWorkStatus: String?
+    public var aiWorkContext: String?
+    public var aiClarificationRequest: String?
 
     public init(
         title: String? = nil,
@@ -996,7 +1014,10 @@ public struct ShipyardPlannerItemUpdate: Encodable, Sendable {
         targetDate: String? = nil,
         productName: String? = nil,
         productSlugHint: String? = nil,
-        linkedPostId: String? = nil
+        linkedPostId: String? = nil,
+        aiWorkStatus: String? = nil,
+        aiWorkContext: String? = nil,
+        aiClarificationRequest: String? = nil
     ) {
         self.title = title
         self.description = description
@@ -1014,6 +1035,9 @@ public struct ShipyardPlannerItemUpdate: Encodable, Sendable {
         self.productName = productName
         self.productSlugHint = productSlugHint
         self.linkedPostId = linkedPostId
+        self.aiWorkStatus = aiWorkStatus
+        self.aiWorkContext = aiWorkContext
+        self.aiClarificationRequest = aiClarificationRequest
     }
 }
 
@@ -1232,7 +1256,7 @@ public struct ShipyardSessionInfo: Sendable {
     public let expiresAt: Date
 }
 
-public enum ShipyardPromptType: String, Codable, CaseIterable, Hashable, Identifiable, Sendable {
+public enum ShipyardAskType: String, Codable, CaseIterable, Hashable, Identifiable, Sendable {
     case singleChoice = "single_choice"
     case multiChoice = "multi_choice"
     case starRating = "star_rating"
@@ -1271,35 +1295,29 @@ public enum ShipyardPromptType: String, Codable, CaseIterable, Hashable, Identif
         }
     }
 }
-public typealias ShipyardCheckInType = ShipyardPromptType
-public typealias ShipyardAskType = ShipyardPromptType
 
-public struct ShipyardPromptOption: Codable, Identifiable, Sendable {
+public struct ShipyardAskOption: Codable, Identifiable, Sendable {
     public let id: String
     public let label: String
     public let value: String
     public let sortOrder: Int
-    public let voteCount: Int?
+    public let selectionCount: Int?
 }
-public typealias ShipyardCheckInOption = ShipyardPromptOption
-public typealias ShipyardAskOption = ShipyardPromptOption
 
-public struct ShipyardPromptResponse: Codable, Sendable {
+public struct ShipyardAskResponse: Codable, Sendable {
     public let selectedOptionIds: [String]
     public let ratingValue: Int?
     public let responseText: String?
     public let submittedAt: String
     public let updatedAt: String
 }
-public typealias ShipyardCheckInResponse = ShipyardPromptResponse
-public typealias ShipyardAskResponse = ShipyardPromptResponse
 
-public struct ShipyardPrompt: Codable, Identifiable, Sendable {
+public struct ShipyardAsk: Codable, Identifiable, Sendable {
     public let id: String
     public let productId: String?
     public let title: String
     public let description: String?
-    public let promptType: String
+    public let askType: String
     public let status: String
     public let resultsVisibility: String
     public let minRating: Int
@@ -1310,16 +1328,16 @@ public struct ShipyardPrompt: Codable, Identifiable, Sendable {
     public let state: String
     public let responseCount: Int
     public let averageRating: Double?
-    public let options: [ShipyardPromptOption]
-    public let myResponse: ShipyardPromptResponse?
+    public let options: [ShipyardAskOption]
+    public let myResponse: ShipyardAskResponse?
     public let resultsVisible: Bool
 
-    public var type: ShipyardPromptType? {
-        ShipyardPromptType(rawValue: promptType)
+    public var type: ShipyardAskType? {
+        ShipyardAskType(rawValue: askType)
     }
 
     public var typeTitle: String {
-        type?.title ?? promptType
+        type?.title ?? askType
             .split(separator: "_")
             .map { $0.prefix(1).uppercased() + String($0.dropFirst()) }
             .joined(separator: " ")
@@ -1349,8 +1367,6 @@ public struct ShipyardPrompt: Codable, Identifiable, Sendable {
         myResponse != nil
     }
 }
-public typealias ShipyardCheckIn = ShipyardPrompt
-public typealias ShipyardAsk = ShipyardPrompt
 
 public struct ShipyardAnnouncementState: Codable, Sendable {
     public let shownCount: Int
@@ -1392,12 +1408,6 @@ public struct ShipyardEngagementUpdates: Sendable {
         self.announcements = announcements
         self.refreshedAt = refreshedAt
     }
-
-    @available(*, deprecated, renamed: "asks")
-    public var checkIns: [ShipyardCheckIn] { asks }
-
-    @available(*, deprecated, renamed: "asks")
-    public var prompts: [ShipyardPrompt] { asks }
 }
 
 public enum ShipyardAnnouncementEventType: String, Codable, Sendable {
@@ -1430,14 +1440,10 @@ public struct ShipyardNotificationSubscriptionDeleteResult: Codable, Sendable {
     public let count: Int
 }
 
-public struct ShipyardPromptResponseResult: Codable, Sendable {
+public struct ShipyardAskResponseResult: Codable, Sendable {
     public let ok: Bool
-    public let prompt: ShipyardPrompt
-    public let checkIn: ShipyardCheckIn?
-    public let ask: ShipyardAsk?
+    public let ask: ShipyardAsk
 }
-public typealias ShipyardCheckInResponseResult = ShipyardPromptResponseResult
-public typealias ShipyardAskResponseResult = ShipyardPromptResponseResult
 
 public enum ShipyardError: Error, LocalizedError {
     case invalidURL
@@ -1515,16 +1521,8 @@ private struct ProductEnvelope: Codable {
     let product: ShipyardProduct
 }
 
-private struct PromptsEnvelope: Codable {
-    let asks: [ShipyardAsk]?
-    let checkIns: [ShipyardCheckIn]?
-    let prompts: [ShipyardPrompt]
-
-    enum CodingKeys: String, CodingKey {
-        case asks
-        case checkIns
-        case prompts
-    }
+private struct AsksEnvelope: Codable {
+    let asks: [ShipyardAsk]
 }
 
 private struct AnnouncementsEnvelope: Codable {
@@ -1532,22 +1530,12 @@ private struct AnnouncementsEnvelope: Codable {
 }
 
 private struct EngagementUpdatesEnvelope: Codable {
-    let asks: [ShipyardAsk]?
-    let checkIns: [ShipyardCheckIn]?
-    let prompts: [ShipyardPrompt]
+    let asks: [ShipyardAsk]
     let announcements: [ShipyardAnnouncement]
     let refreshedAt: String?
-
-    enum CodingKeys: String, CodingKey {
-        case asks
-        case checkIns
-        case prompts
-        case announcements
-        case refreshedAt
-    }
 }
 
-private struct PromptResponseRequest: Codable {
+private struct AskResponseRequest: Codable {
     let optionId: String?
     let optionIds: [String]?
     let ratingValue: Int?
@@ -1964,12 +1952,13 @@ public enum ShipyardInstallationIdentifier {
 }
 
 public final class ShipyardClient: @unchecked Sendable {
-    public static let sdkVersion = "0.2.4"
+    public static let sdkVersion = "0.25.0"
     public static let engagementReadCacheTTL: TimeInterval = 15 * 60
 
     public let baseURL: URL
     public let productSlug: String
     public let platform: String
+    public let runtimeEnvironment: String
 
     private let installationIdProvider: @Sendable () -> String
     private let appVersionProvider: @Sendable () -> String?
@@ -2005,6 +1994,17 @@ public final class ShipyardClient: @unchecked Sendable {
         #endif
     }
 
+    /// Distinguishes simulator processes from Apple hardware at compile time.
+    /// This is reported separately from the opaque installation identifier so
+    /// analytics can exclude simulator activity without changing identity.
+    public static func inferredRuntimeEnvironment() -> String {
+        #if targetEnvironment(simulator)
+        return "simulator"
+        #else
+        return "physical_device"
+        #endif
+    }
+
     public static func inferredAppVersion() -> String? {
         let value = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -2029,6 +2029,7 @@ public final class ShipyardClient: @unchecked Sendable {
         self.baseURL = baseURL
         self.productSlug = productSlug
         self.platform = platform
+        self.runtimeEnvironment = Self.inferredRuntimeEnvironment()
         self.installationIdProvider = installationIdProvider
         self.appVersionProvider = appVersionProvider
         self.buildNumberProvider = buildNumberProvider
@@ -2580,26 +2581,11 @@ public final class ShipyardClient: @unchecked Sendable {
             cachePolicy: cachePolicy
         )
         do {
-            let envelope = try decoder.decode(PromptsEnvelope.self, from: data)
-            return envelope.asks ?? envelope.checkIns ?? envelope.prompts
+            let envelope = try decoder.decode(AsksEnvelope.self, from: data)
+            return envelope.asks
         } catch {
             throw ShipyardError.decodingFailed
         }
-    }
-
-    public func fetchPrompts(
-        history: Bool = false,
-        cachePolicy: ShipyardReadCachePolicy = .automatic
-    ) async throws -> [ShipyardPrompt] {
-        try await fetchAsks(history: history, cachePolicy: cachePolicy)
-    }
-
-    @available(*, deprecated, renamed: "fetchAsks(history:cachePolicy:)")
-    public func fetchCheckIns(
-        history: Bool = false,
-        cachePolicy: ShipyardReadCachePolicy = .automatic
-    ) async throws -> [ShipyardCheckIn] {
-        try await fetchAsks(history: history, cachePolicy: cachePolicy)
     }
 
     public func fetchAnnouncements(
@@ -2657,7 +2643,7 @@ public final class ShipyardClient: @unchecked Sendable {
             throw ShipyardError.decodingFailed
         }
         return ShipyardEngagementUpdates(
-            asks: envelope.asks ?? envelope.checkIns ?? envelope.prompts,
+            asks: envelope.asks,
             announcements: envelope.announcements,
             refreshedAt: ShipyardDateParser.date(from: envelope.refreshedAt)
         )
@@ -2667,9 +2653,8 @@ public final class ShipyardClient: @unchecked Sendable {
         askId: String,
         optionId: String
     ) async throws -> ShipyardAsk {
-        try await respondToEngagementPrompt(
-            promptId: askId,
-            pathSegment: "asks",
+        try await respondToAskRequest(
+            askId: askId,
             optionIds: [optionId],
             ratingValue: nil,
             responseText: nil
@@ -2680,9 +2665,8 @@ public final class ShipyardClient: @unchecked Sendable {
         askId: String,
         optionIds: [String]
     ) async throws -> ShipyardAsk {
-        try await respondToEngagementPrompt(
-            promptId: askId,
-            pathSegment: "asks",
+        try await respondToAskRequest(
+            askId: askId,
             optionIds: optionIds,
             ratingValue: nil,
             responseText: nil
@@ -2693,9 +2677,8 @@ public final class ShipyardClient: @unchecked Sendable {
         askId: String,
         ratingValue: Int
     ) async throws -> ShipyardAsk {
-        try await respondToEngagementPrompt(
-            promptId: askId,
-            pathSegment: "asks",
+        try await respondToAskRequest(
+            askId: askId,
             optionIds: nil,
             ratingValue: ratingValue,
             responseText: nil
@@ -2706,97 +2689,12 @@ public final class ShipyardClient: @unchecked Sendable {
         askId: String,
         responseText: String
     ) async throws -> ShipyardAsk {
-        try await respondToEngagementPrompt(
-            promptId: askId,
-            pathSegment: "asks",
+        try await respondToAskRequest(
+            askId: askId,
             optionIds: nil,
             ratingValue: nil,
             responseText: responseText
         )
-    }
-
-    public func respondToPrompt(
-        promptId: String,
-        optionId: String
-    ) async throws -> ShipyardPrompt {
-        try await respondToEngagementPrompt(
-            promptId: promptId,
-            pathSegment: "prompts",
-            optionIds: [optionId],
-            ratingValue: nil,
-            responseText: nil
-        )
-    }
-
-    public func respondToPrompt(
-        promptId: String,
-        optionIds: [String]
-    ) async throws -> ShipyardPrompt {
-        try await respondToEngagementPrompt(
-            promptId: promptId,
-            pathSegment: "prompts",
-            optionIds: optionIds,
-            ratingValue: nil,
-            responseText: nil
-        )
-    }
-
-    public func respondToPrompt(
-        promptId: String,
-        ratingValue: Int
-    ) async throws -> ShipyardPrompt {
-        try await respondToEngagementPrompt(
-            promptId: promptId,
-            pathSegment: "prompts",
-            optionIds: nil,
-            ratingValue: ratingValue,
-            responseText: nil
-        )
-    }
-
-    public func respondToPrompt(
-        promptId: String,
-        responseText: String
-    ) async throws -> ShipyardPrompt {
-        try await respondToEngagementPrompt(
-            promptId: promptId,
-            pathSegment: "prompts",
-            optionIds: nil,
-            ratingValue: nil,
-            responseText: responseText
-        )
-    }
-
-    @available(*, deprecated, renamed: "respondToAsk(askId:optionId:)")
-    public func respondToCheckIn(
-        checkInId: String,
-        optionId: String
-    ) async throws -> ShipyardCheckIn {
-        try await respondToAsk(askId: checkInId, optionId: optionId)
-    }
-
-    @available(*, deprecated, renamed: "respondToAsk(askId:optionIds:)")
-    public func respondToCheckIn(
-        checkInId: String,
-        optionIds: [String]
-    ) async throws -> ShipyardCheckIn {
-        try await respondToAsk(askId: checkInId, optionIds: optionIds)
-    }
-
-    @available(*, deprecated, renamed: "respondToAsk(askId:ratingValue:)")
-    public func respondToCheckIn(
-        checkInId: String,
-        ratingValue: Int
-    ) async throws -> ShipyardCheckIn {
-        try await respondToAsk(askId: checkInId, ratingValue: ratingValue)
-    }
-
-    @available(*, deprecated, renamed: "respondToAsk(askId:responseText:)")
-    public func respondToCheckIn(
-        checkInId: String,
-        responseText: String
-    ) async throws -> ShipyardCheckIn {
-        try await respondToAsk(askId: checkInId, responseText: responseText)
     }
 
     public func recordAnnouncementEvent(
@@ -3045,25 +2943,25 @@ public final class ShipyardClient: @unchecked Sendable {
     ) async throws -> [ShipyardItem]? {
         let dayKey = Self.activityDayKey(for: date, calendar: calendar)
         let defaultsKey = dailyRoadmapPullDefaultsKey()
-        let checkInKey = dailyCheckInDefaultsKey()
+        let deviceActivityKey = dailyDeviceActivityDefaultsKey()
         if userDefaults.string(forKey: defaultsKey) == dayKey {
-            // Migrate the older combined marker without repeating today's check-in.
-            if userDefaults.string(forKey: checkInKey) != dayKey {
-                userDefaults.set(dayKey, forKey: checkInKey)
+            // Migrate the older combined marker without repeating today's Device Activity.
+            if userDefaults.string(forKey: deviceActivityKey) != dayKey {
+                userDefaults.set(dayKey, forKey: deviceActivityKey)
             }
             if !force { return nil }
         }
 
-        if userDefaults.string(forKey: checkInKey) != dayKey {
+        if userDefaults.string(forKey: deviceActivityKey) != dayKey {
             do {
                 _ = try await refreshSession(reason: "roadmap_pull")
-                userDefaults.set(dayKey, forKey: checkInKey)
+                userDefaults.set(dayKey, forKey: deviceActivityKey)
             } catch {
-                // Queue the one daily check-in with its original UTC day, but
+                // Queue the one Device Activity with its original UTC day, but
                 // leave the Roadmap pull incomplete so content retries later.
                 if Self.isConnectivityError(error) {
-                    await enqueueOfflineDailyCheckIn(dayKey: dayKey, reason: "roadmap_pull")
-                    userDefaults.set(dayKey, forKey: checkInKey)
+                    await enqueueOfflineDailyDeviceActivity(dayKey: dayKey, reason: "roadmap_pull")
+                    userDefaults.set(dayKey, forKey: deviceActivityKey)
                     throw ShipyardError.offlineQueued
                 }
                 throw error
@@ -3094,42 +2992,7 @@ public final class ShipyardClient: @unchecked Sendable {
         return updates
     }
 
-    @available(*, deprecated, message: "Use pullRoadmapDaily() for the daily Roadmap read.")
-    @discardableResult
-    public func pingDailyActiveDevice(
-        date: Date = Date(),
-        calendar: Calendar = ShipyardClient.serverActivityCalendar,
-        userDefaults: UserDefaults = .standard,
-        force: Bool = false
-    ) async throws -> ShipyardSessionInfo? {
-        let dayKey = Self.activityDayKey(for: date, calendar: calendar)
-        let defaultsKey = dailyAppActivityDefaultsKey()
-        if !force, userDefaults.string(forKey: defaultsKey) == dayKey {
-            return nil
-        }
-
-        let session = try await refreshSession(reason: "daily_activity")
-        userDefaults.set(dayKey, forKey: defaultsKey)
-        return session
-    }
-
-    @available(*, deprecated, message: "Use pullRoadmapDaily() for the daily Roadmap read.")
-    @discardableResult
-    public func checkInDailyActiveDevice(
-        date: Date = Date(),
-        calendar: Calendar = ShipyardClient.serverActivityCalendar,
-        userDefaults: UserDefaults = .standard,
-        force: Bool = false
-    ) async throws -> ShipyardSessionInfo? {
-        try await pingDailyActiveDevice(
-            date: date,
-            calendar: calendar,
-            userDefaults: userDefaults,
-            force: force
-        )
-    }
-
-    private func enqueueOfflineDailyCheckIn(dayKey: String, reason: String) async {
+    private func enqueueOfflineDailyDeviceActivity(dayKey: String, reason: String) async {
         let installationId = installationIdProvider().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !installationId.isEmpty else { return }
         var body: [String: String] = [
@@ -3137,6 +3000,7 @@ public final class ShipyardClient: @unchecked Sendable {
             "installationId": installationId,
             "platform": platform,
             "shipyardKitVersion": Self.sdkVersion,
+            "runtimeEnvironment": runtimeEnvironment,
             "sessionReason": reason,
             "activityDate": dayKey
         ]
@@ -3175,7 +3039,8 @@ public final class ShipyardClient: @unchecked Sendable {
                 "productSlug": productSlug,
                 "installationId": installationId,
                 "platform": platform,
-                "shipyardKitVersion": Self.sdkVersion
+                "shipyardKitVersion": Self.sdkVersion,
+                "runtimeEnvironment": runtimeEnvironment
             ]
             if let appVersion = appVersionProvider(), !appVersion.isEmpty {
                 body["appVersion"] = appVersion
@@ -3201,7 +3066,7 @@ public final class ShipyardClient: @unchecked Sendable {
         applySDKHeaders(to: &request)
 
         // One retry with a short jittered delay for transient failures: this
-        // call carries the daily check-in, so a flaky launch-time network
+        // call carries the Device Activity, so a flaky launch-time network
         // should not cost a device-day.
         var responseData: Data
         do {
@@ -3471,17 +3336,16 @@ public final class ShipyardClient: @unchecked Sendable {
         }
     }
 
-    private func respondToEngagementPrompt(
-        promptId: String,
-        pathSegment: String,
+    private func respondToAskRequest(
+        askId: String,
         optionIds: [String]?,
         ratingValue: Int?,
         responseText: String?
-    ) async throws -> ShipyardPrompt {
+    ) async throws -> ShipyardAsk {
         let normalizedOptionIds = optionIds?
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        let payload = PromptResponseRequest(
+        let payload = AskResponseRequest(
             optionId: normalizedOptionIds?.count == 1 ? normalizedOptionIds?.first : nil,
             optionIds: (normalizedOptionIds?.count ?? 0) > 1 ? normalizedOptionIds : nil,
             ratingValue: ratingValue,
@@ -3489,13 +3353,13 @@ public final class ShipyardClient: @unchecked Sendable {
         )
         let data = try encoder.encode(payload)
         let responseData = try await authedWriteRequest(
-            path: "v1/engagement/\(pathSegment)/\(promptId)/respond",
+            path: "v1/engagement/asks/\(askId)/respond",
             method: "POST",
             body: data
         )
         do {
-            let response = try decoder.decode(ShipyardPromptResponseResult.self, from: responseData)
-            return response.ask ?? response.checkIn ?? response.prompt
+            let response = try decoder.decode(ShipyardAskResponseResult.self, from: responseData)
+            return response.ask
         } catch {
             throw ShipyardError.decodingFailed
         }
@@ -3541,10 +3405,10 @@ public final class ShipyardClient: @unchecked Sendable {
         ].joined(separator: "|")
     }
 
-    private func dailyCheckInDefaultsKey() -> String {
+    private func dailyDeviceActivityDefaultsKey() -> String {
         [
             "ShipyardKit",
-            "dailyCheckIn",
+            "dailyDeviceActivity",
             baseURL.absoluteString,
             productSlug,
             platform
@@ -3562,15 +3426,6 @@ public final class ShipyardClient: @unchecked Sendable {
         ].joined(separator: "|")
     }
 
-    private func dailyAppActivityDefaultsKey() -> String {
-        [
-            "ShipyardKit",
-            "dailyActiveDevice",
-            baseURL.absoluteString,
-            productSlug,
-            platform
-        ].joined(separator: "|")
-    }
 }
 
 private struct ServerError: Codable {

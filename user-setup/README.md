@@ -28,6 +28,7 @@ Have these ready:
 - `shipyardBaseUrl`: open the Shipyard workspace and copy the browser origin. Example: `https://acme-studio.startshipyard.com`.
 - `productSlug`: open the product in Shipyard and copy the slug from the URL. Example: `/products/atlas` means `atlas`.
 - `platform`: ShipyardKit infers this automatically from the Apple runtime unless app code explicitly overrides it.
+- `runtimeEnvironment`: ShipyardKit infers `simulator` or `physical_device` at compile time; no app configuration is required.
 
 The example values use Acme Corp as the company and Atlas as the product. Replace them before testing a real app.
 

@@ -99,13 +99,9 @@ struct ShipyardKitLauncherView: View {
         .sheet(isPresented: $showingRoadmap) {
             ShipyardKitRoadmapSheet(client: client)
         }
-        .task {
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
             await syncDaily()
-        }
-        .onChange(of: scenePhase) { phase in
-            if phase == .active {
-                Task { await syncDaily() }
-            }
         }
     }
 
@@ -452,7 +448,7 @@ struct ShipyardKitAskView: View {
                 }
             }
         case nil:
-            Text("Unsupported ask type: \(ask.promptType)")
+            Text("Unsupported ask type: \(ask.askType)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -467,8 +463,8 @@ struct ShipyardKitAskView: View {
                     .font(.caption)
             }
             ForEach(ask.options) { option in
-                if let voteCount = option.voteCount {
-                    Text("\(option.label): \(voteCount)")
+                if let selectionCount = option.selectionCount {
+                    Text("\(option.label): \(selectionCount)")
                         .font(.caption)
                 }
             }
@@ -517,8 +513,18 @@ struct ShipyardKitRoadmapSheet: View {
     @State private var itemType: ShipyardItemType = .feature
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var votedItemIds: Set<String>
 
     let client: ShipyardClient
+
+    private static let votedItemIdsKey = "ShipyardKit.votedItemIds"
+
+    init(client: ShipyardClient) {
+        self.client = client
+        _votedItemIds = State(initialValue: Set(
+            UserDefaults.standard.stringArray(forKey: Self.votedItemIdsKey) ?? []
+        ))
+    }
 
     var body: some View {
         NavigationStack {
@@ -557,6 +563,7 @@ struct ShipyardKitRoadmapSheet: View {
                     ForEach(statusGroups) { group in
                         Section {
                             ForEach(group.items) { item in
+                                let isVoted = votedItemIds.contains(item.id)
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(item.title).font(.headline)
                                     if let description = item.description, !description.isEmpty {
@@ -581,11 +588,13 @@ struct ShipyardKitRoadmapSheet: View {
                                     ScrollView(.horizontal, showsIndicators: false) {
                                         HStack(spacing: 8) {
                                             Button {
-                                                Task { await vote(on: item.id, unvote: false) }
+                                                Task { await vote(on: item.id, unvote: isVoted) }
                                             } label: {
-                                                Label("\(item.voteCount)", systemImage: "arrow.up")
+                                                Label("\(item.voteCount)", systemImage: isVoted ? "arrow.up.circle.fill" : "arrow.up.circle")
                                             }
                                             .buttonStyle(.bordered)
+                                            .tint(isVoted ? .accentColor : .secondary)
+                                            .accessibilityLabel(isVoted ? "Remove vote, \(item.voteCount) votes" : "Upvote, \(item.voteCount) votes")
                                             roadmapPill(group.title)
                                             if let availability = item.availabilityLabel(currentAppVersion: currentAppVersion) {
                                                 roadmapPill(availability)
@@ -715,14 +724,31 @@ struct ShipyardKitRoadmapSheet: View {
         defer { isLoading = false }
         do {
             errorMessage = nil
-            _ = try await client.vote(itemId: itemId, unvote: unvote)
-            await loadCategories()
+            let updated = try await client.vote(itemId: itemId, unvote: unvote)
+            setVoteState(itemId: itemId, voted: !unvote)
+            replaceRoadmapItem(updated)
         } catch ShipyardError.offlineQueued {
             errorMessage = ShipyardError.offlineQueued.localizedDescription
-            await loadCategories()
+            setVoteState(itemId: itemId, voted: !unvote)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func replaceRoadmapItem(_ updated: ShipyardItem) {
+        let items = statusGroups.flatMap(\.items).map { item in
+            item.id == updated.id ? updated : item
+        }
+        applyRoadmapItems(items, force: true)
+    }
+
+    private func setVoteState(itemId: String, voted: Bool) {
+        if voted {
+            votedItemIds.insert(itemId)
+        } else {
+            votedItemIds.remove(itemId)
+        }
+        UserDefaults.standard.set(Array(votedItemIds).sorted(), forKey: Self.votedItemIdsKey)
     }
 
     private func roadmapPill(_ text: String) -> some View {
