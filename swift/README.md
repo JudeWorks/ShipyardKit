@@ -163,7 +163,19 @@ If the app uses `ShipyardKit/swift` as a local Swift package, keep that folder i
 
 ## Public API
 
+The host app should provide a stable UUID from `UserDefaults`. Never read, write, or migrate the installation identifier through Keychain, and do not use the Keychain-backed `ShipyardInstallationIdentifier.stable()` helper.
+
 ```swift
+func stableInstallationId() -> String {
+    let key = "shipyard.installationId"
+    if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+        return existing
+    }
+    let created = UUID().uuidString
+    UserDefaults.standard.set(created, forKey: key)
+    return created
+}
+
 let client = ShipyardClient(
     baseURL: URL(string: "https://acme-studio.startshipyard.com")!,
     productSlug: "atlas",

@@ -129,7 +129,7 @@ Before installing, collect:
 3. Add `ShipyardKit/swift` as a local Swift Package in Xcode.
 4. Add product `ShipyardKit` to the app target.
 5. `import ShipyardKit`.
-6. Create a stable per-install identifier using Keychain or persisted `UserDefaults`.
+6. Create the stable per-install identifier as a UUID stored in `UserDefaults`. Always reuse that value; never store, read, or migrate the installation identifier through Keychain, and do not use the Keychain-backed `ShipyardInstallationIdentifier.stable()` helper.
 7. Instantiate `ShipyardClient` with your Shipyard workspace URL, product slug, and installation id provider. ShipyardKit infers the Apple platform automatically unless you explicitly override it.
    - ShipyardKit automatically includes app version (`CFBundleShortVersionString`) and build number (`CFBundleVersion`) in mobile session payloads unless you override providers.
    - ShipyardKit also sends `ShipyardClient.sdkVersion` as `shipyardKitVersion` and `X-ShipyardKit-Version`.
@@ -181,7 +181,15 @@ let client = ShipyardClient(
     baseURL: URL(string: "https://acme-studio.startshipyard.com")!,
     productSlug: "atlas-tv",
     platform: "tvos",
-    installationIdProvider: { ShipyardInstallationIdentifier.stable() }
+    installationIdProvider: {
+        let key = "shipyard.installationId"
+        if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+            return existing
+        }
+        let created = UUID().uuidString
+        UserDefaults.standard.set(created, forKey: key)
+        return created
+    }
 )
 
 Task {
@@ -343,7 +351,15 @@ import ShipyardKit
 let client = ShipyardClient(
     baseURL: URL(string: "https://acme-studio.startshipyard.com")!,
     productSlug: "atlas",
-    installationIdProvider: { ShipyardInstallationIdentifier.stable() }
+    installationIdProvider: {
+        let key = "shipyard.installationId"
+        if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+            return existing
+        }
+        let created = UUID().uuidString
+        UserDefaults.standard.set(created, forKey: key)
+        return created
+    }
 )
 
 let daily = await client.syncDaily()

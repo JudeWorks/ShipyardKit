@@ -10,7 +10,7 @@
     "productStatus": "ShipyardKit mobile sessions work for app products in any status; the product does not need to be live before testing."
   },
   "notes": {
-    "installationIdStrategy": "stable per-install UUID stored in Keychain or UserDefaults",
+    "installationIdStrategy": "stable per-install UUID stored in UserDefaults only; never store, read, or migrate the installation identifier through Keychain",
     "appVersionSource": "CFBundleShortVersionString",
     "buildNumberSource": "CFBundleVersion",
     "shipyardKitVersionSource": "ShipyardClient.sdkVersion",

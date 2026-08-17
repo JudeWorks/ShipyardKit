@@ -8,8 +8,13 @@ enum ShipyardKitExampleConfig {
         baseURL: URL(string: "https://acme-studio.startshipyard.com")!,
         productSlug: "atlas",
         installationIdProvider: {
-            // Keychain-backed: survives reinstalls so device counts stay honest.
-            ShipyardInstallationIdentifier.stable()
+            let key = "shipyard.installationId"
+            if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+                return existing
+            }
+            let created = UUID().uuidString
+            UserDefaults.standard.set(created, forKey: key)
+            return created
         },
         appVersionProvider: {
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String

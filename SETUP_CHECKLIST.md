@@ -14,6 +14,7 @@ Use this after integration to confirm ShipyardKit is ready for developer or auto
 - [ ] `shipyardBaseUrl` points to the correct Shipyard workspace deployment.
 - [ ] `productSlug` matches the product where Roadmap suggestions should land.
 - [ ] App sends a stable per-install `installationId` and does not regenerate it every launch.
+- [ ] App persists `installationId` in `UserDefaults` only and never reads, writes, or migrates that identifier through Keychain or calls the Keychain-backed `ShipyardInstallationIdentifier.stable()` helper.
 - [ ] App sends correct `platform`.
 - [ ] App sends app version and build number in mobile session payloads (ShipyardKit defaults to `CFBundleShortVersionString` and `CFBundleVersion`).
 - [ ] App sends `shipyardKitVersion` in mobile session payloads (ShipyardKit defaults to `ShipyardClient.sdkVersion`).

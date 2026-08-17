@@ -53,7 +53,8 @@ Implementation requirements:
 - Verify the target Shipyard product exists in the workspace and is an app product. Product status does not block ShipyardKit mobile sessions.
 - Let ShipyardKit mint short-lived tokens through POST /v1/auth/mobile/public-session.
 - Configure `syncDaily()` on app launch and foreground resume so each install performs one coordinated Roadmap, Engagement, queued-write, and Device Activity Event sync per UTC calendar day.
-- Use `ShipyardInstallationIdentifier.stable()` for `installationIdProvider` — it persists the id in the Keychain so reinstalls keep the same device identity.
+- Create the installation identifier as a UUID, persist it directly in `UserDefaults`, and supply the stored value through `installationIdProvider`. Reuse it on later launches and create a new value only when none exists.
+- Always use `UserDefaults` for the installation identifier. Never read, write, or migrate this identifier through Keychain or the Security framework, and never call the Keychain-backed `ShipyardInstallationIdentifier.stable()` helper.
 - Confirm the mobile session sends the configured product slug, stable installation id, inferred platform, compile-time runtime environment (`simulator` or `physical_device`), `CFBundleShortVersionString`, `CFBundleVersion`, `ShipyardClient.sdkVersion`, `sessionReason: "roadmap_pull"`, and the original UTC `activityDate` for a queued offline Device Activity Event.
 - Offline launches are safe: if the daily pull fails with a connectivity error, the SDK queues the Device Activity Event with its UTC day and delivers it automatically on the next connection (`ShipyardError.offlineQueued` is thrown so callers can ignore it with `try?`).
 - `syncDaily()` should be called freely from lifecycle hooks; the SDK suppresses duplicate successful Roadmap and Engagement pulls for the same UTC day and retries incomplete content later without repeating the Device Activity Event.

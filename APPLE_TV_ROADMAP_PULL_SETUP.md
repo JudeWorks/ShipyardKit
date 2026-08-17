@@ -14,7 +14,7 @@ Do not add visible Roadmap UI, Ask UI, Announcements, voting, inboxes, badges, o
 
 1. Add `ShipyardKit/swift` as a local Swift package.
 2. Add package product `ShipyardKit` to the tvOS app target.
-3. Create one stable per-install ID and persist it. `UserDefaults` is acceptable for this background-pull mode; Keychain is also fine if the project already uses it.
+3. Create one stable per-install UUID and persist it directly in `UserDefaults`. Reuse it on later launches. Never read, write, or migrate the installation identifier through Keychain, and do not use the Keychain-backed `ShipyardInstallationIdentifier.stable()` helper.
 4. Configure `ShipyardClient` with `baseURL`, `productSlug`, `platform: "tvos"`, and the install ID provider.
 5. Call `pullRoadmapDaily()` on app launch.
 6. Call it again when the app returns to active foreground state.
