@@ -4,7 +4,13 @@ ShipyardKit is the Swift package and setup bundle for adding Shipyard-powered an
 
 It also exposes service-token APIs for native admin tools, including a Mac planner surface that can list products, load release-grouped planner items, update working versions, manage internal planner items, and edit planning tasks.
 
-Current SDK version: `0.25.0`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
+Current SDK version: `0.25.2`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
+
+ShipyardKit depends on the versioned Shipyard HTTP/JSON API, not on a database
+driver. Version 0.25.2 declares API contract version 1 on its requests, allowing
+the Shipyard server to move between Neon PostgreSQL and Cloudflare-backed
+storage without requiring another app release. Existing 0.25.0 apps remain
+supported and may omit the contract header.
 
 Zip and hand off the top-level `ShipyardKit/` folder. That folder is the complete distributable package for a developer or installer.
 
@@ -81,6 +87,9 @@ Use the three-row Support pattern by default, styled with the host app's existin
 ## Server Requirements
 
 Your Shipyard backend must support:
+
+- ShipyardKit API contract version 1. The server must also accept legacy 0.25.0
+  requests that omit `X-ShipyardKit-Contract-Version`.
 
 - `POST /v1/auth/mobile/public-session`
 - `GET /v1/engagement/updates` with ShipyardKit scoped bearer token

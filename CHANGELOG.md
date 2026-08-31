@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.25.2 — 2026-08-31
+
+- Scoped installation continuity proofs to the stable installation identifier,
+  migrated existing proof entries, and added one-time recovery when a stale
+  proof is rejected so affected installs can bootstrap a fresh mobile session
+  instead of remaining stuck on repeated 401 responses.
+- Declared ShipyardKit API contract version 1 on every SDK request. The contract
+  stays at the HTTP/JSON boundary, so the same app build works while Shipyard's
+  storage moves from Neon PostgreSQL to Cloudflare-backed services.
+- No host-app integration changes are required when upgrading from 0.25.0.
+
+
 ## 0.25.0 — 2026-07-20
 
 - Standardized the public engagement model on `ShipyardAsk`, `ShipyardAskType`,

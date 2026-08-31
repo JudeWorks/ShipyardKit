@@ -2,7 +2,12 @@
 
 `ShipyardKit` is the Swift package product developers add to Apple apps for daily Roadmap pull visibility, Announcements, Ask, and Roadmap flows backed by Shipyard. It also includes service-token APIs for native admin tools, including Mac planner apps.
 
-Current SDK version: `0.25.0`.
+Current SDK version: `0.25.2`.
+
+Version 0.25.2 declares ShipyardKit API contract version 1 on every request.
+The SDK remains database-provider-neutral: apps call Shipyard's HTTP API and do
+not connect to Neon, D1, Durable Objects, or R2 directly. Existing 0.25.0 apps
+remain supported without an integration change.
 
 ## Install via Swift Package Manager
 

@@ -13,7 +13,7 @@
   "platform": "ios",
   "appVersion": "1.0.2",
   "buildNumber": "102",
-  "shipyardKitVersion": "0.25.0",
+  "shipyardKitVersion": "0.25.2",
   "runtimeEnvironment": "physical_device",
   "sessionReason": "roadmap_pull",
   "activityDate": "2026-05-13"
@@ -40,13 +40,24 @@
     "platform": "ios",
     "appVersion": "1.0.2",
     "buildNumber": "102",
-    "shipyardKitVersion": "0.25.0",
+    "shipyardKitVersion": "0.25.2",
     "runtimeEnvironment": "physical_device"
   }
 }
 ```
 
-ShipyardKit also sends `X-ShipyardKit-Version: 0.25.0` on SDK requests. `runtimeEnvironment` is compile-time metadata with supported values `simulator` and `physical_device`; legacy or unsupported values are stored as `unknown`. Simulator activity is retained for diagnostics and excluded from Active Devices and primary Device Activity metrics.
+ShipyardKit 0.25.2 sends `X-ShipyardKit-Version: 0.25.2` and
+`X-ShipyardKit-Contract-Version: 1` on SDK requests. The server returns
+`X-ShipyardKit-Contract-Version: 1` on `/v1` responses. Contract version 1 is
+the stable HTTP/JSON boundary: Neon PostgreSQL, Cloudflare D1, Durable Objects,
+and R2 are implementation details and must return the same documented status
+codes and response bodies. Servers must continue accepting ShipyardKit 0.25.0
+requests that do not include the contract-version header.
+
+`runtimeEnvironment` is compile-time metadata with supported values `simulator`
+and `physical_device`; legacy or unsupported values are stored as `unknown`.
+Simulator activity is retained for diagnostics and excluded from Active Devices
+and primary Device Activity metrics.
 
 On the first request for an installation, omit `installationProof`. The server
 returns an untrusted, read-only bootstrap session plus a one-time proof.

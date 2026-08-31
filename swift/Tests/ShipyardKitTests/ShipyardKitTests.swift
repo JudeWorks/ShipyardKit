@@ -57,6 +57,7 @@ final class ShipyardKitTests: XCTestCase {
         ShipyardMockURLProtocol.requestHandler = { request in
             XCTAssertEqual(request.url?.path, "/v1/auth/mobile/public-session")
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-ShipyardKit-Version"), ShipyardClient.sdkVersion)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-ShipyardKit-Contract-Version"), ShipyardClient.apiContractVersion)
             XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "ShipyardKit/\(ShipyardClient.sdkVersion)")
             let body = try Self.requestJSONBody(request)
             XCTAssertEqual(body["shipyardKitVersion"] as? String, ShipyardClient.sdkVersion)
@@ -115,6 +116,76 @@ final class ShipyardKitTests: XCTestCase {
 
         XCTAssertEqual(session.token, "verified-token")
         XCTAssertEqual(requestCount, 2)
+    }
+
+    func testSessionRecoversFromRejectedStaleContinuityProof() async throws {
+        let productSlug = "stale-continuity-proof-\(UUID().uuidString)"
+        let installationId = "test-installation-\(productSlug)"
+        let baseURL = try XCTUnwrap(URL(string: "https://example.com"))
+        let staleProof = "mfp_\(String(repeating: "S", count: 43))"
+        let replacementProof = "mfp_\(String(repeating: "R", count: 43))"
+        XCTAssertTrue(
+            ShipyardInstallationIdentifier.storeContinuityProof(
+                staleProof,
+                baseURL: baseURL,
+                productSlug: productSlug,
+                installationId: installationId
+            )
+        )
+        defer {
+            ShipyardInstallationIdentifier.clearContinuityProof(
+                baseURL: baseURL,
+                productSlug: productSlug,
+                installationId: installationId,
+                includingLegacy: true
+            )
+        }
+
+        let client = makeMockClient(productSlug: productSlug)
+        await client.clearOfflineData()
+        var requestCount = 0
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            requestCount += 1
+            let body = try Self.requestJSONBody(request)
+            switch requestCount {
+            case 1:
+                XCTAssertEqual(body["installationProof"] as? String, staleProof)
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 401,
+                    body: #"{"error":"Installation continuity proof is required"}"#
+                )
+            case 2:
+                XCTAssertNil(body["installationProof"])
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 201,
+                    jsonObject: [
+                        "token": "replacement-bootstrap-token",
+                        "expiresAt": "2099-01-01T00:00:00Z",
+                        "installationProof": replacementProof,
+                        "telemetryTrust": "untrusted"
+                    ]
+                )
+            default:
+                XCTAssertEqual(body["installationProof"] as? String, replacementProof)
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 200,
+                    jsonObject: [
+                        "token": "replacement-verified-token",
+                        "expiresAt": "2099-01-01T00:00:00Z",
+                        "telemetryTrust": "verified"
+                    ]
+                )
+            }
+        }
+
+        let session = try await client.refreshSession()
+
+        XCTAssertEqual(session.token, "replacement-verified-token")
+        XCTAssertEqual(requestCount, 3)
     }
 
     func testFetchSiteAnalyticsUsesServiceApiTokenAndDecodesHostnames() async throws {
