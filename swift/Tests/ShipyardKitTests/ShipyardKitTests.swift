@@ -49,6 +49,46 @@ final class ShipyardKitTests: XCTestCase {
         XCTAssertTrue(["simulator", "physical_device"].contains(ShipyardClient.inferredRuntimeEnvironment()))
     }
 
+    func testInstallationIdentityAndContinuityProofPersistInUserDefaults() throws {
+        let suiteName = "ShipyardKitPersistenceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let installationId = ShipyardInstallationIdentifier.stable(userDefaults: defaults)
+        XCTAssertEqual(ShipyardInstallationIdentifier.stable(userDefaults: defaults), installationId)
+
+        let baseURL = try XCTUnwrap(URL(string: "https://example.com"))
+        let proof = "mfp_\(String(repeating: "U", count: 43))"
+        XCTAssertTrue(ShipyardInstallationIdentifier.storeContinuityProof(
+            proof,
+            baseURL: baseURL,
+            productSlug: "defaults-only",
+            installationId: installationId,
+            userDefaults: defaults
+        ))
+        XCTAssertEqual(ShipyardInstallationIdentifier.continuityProof(
+            baseURL: baseURL,
+            productSlug: "defaults-only",
+            installationId: installationId,
+            userDefaults: defaults
+        ), proof)
+
+        ShipyardInstallationIdentifier.clearContinuityProof(
+            baseURL: baseURL,
+            productSlug: "defaults-only",
+            installationId: installationId,
+            includingLegacy: true,
+            userDefaults: defaults
+        )
+        XCTAssertNil(ShipyardInstallationIdentifier.continuityProof(
+            baseURL: baseURL,
+            productSlug: "defaults-only",
+            installationId: installationId,
+            userDefaults: defaults
+        ))
+    }
+
     func testSDKVersionIsSentWithSessionRequests() async throws {
         let productSlug = "sdk-version-\(UUID().uuidString)"
         let client = makeMockClient(productSlug: productSlug)
@@ -62,6 +102,7 @@ final class ShipyardKitTests: XCTestCase {
             let body = try Self.requestJSONBody(request)
             XCTAssertEqual(body["shipyardKitVersion"] as? String, ShipyardClient.sdkVersion)
             XCTAssertEqual(body["runtimeEnvironment"] as? String, ShipyardClient.inferredRuntimeEnvironment())
+            XCTAssertEqual(body["proofPersistence"] as? String, "user_defaults_v1")
             XCTAssertEqual(body["appVersion"] as? String, "1.0")
             XCTAssertEqual(body["buildNumber"] as? String, "1")
             return try Self.jsonResponse(
@@ -118,12 +159,11 @@ final class ShipyardKitTests: XCTestCase {
         XCTAssertEqual(requestCount, 2)
     }
 
-    func testSessionRecoversFromRejectedStaleContinuityProof() async throws {
+    func testRejectedContinuityProofIsPreservedForNonDestructiveRecovery() async throws {
         let productSlug = "stale-continuity-proof-\(UUID().uuidString)"
         let installationId = "test-installation-\(productSlug)"
         let baseURL = try XCTUnwrap(URL(string: "https://example.com"))
         let staleProof = "mfp_\(String(repeating: "S", count: 43))"
-        let replacementProof = "mfp_\(String(repeating: "R", count: 43))"
         XCTAssertTrue(
             ShipyardInstallationIdentifier.storeContinuityProof(
                 staleProof,
@@ -148,44 +188,25 @@ final class ShipyardKitTests: XCTestCase {
         ShipyardMockURLProtocol.requestHandler = { request in
             requestCount += 1
             let body = try Self.requestJSONBody(request)
-            switch requestCount {
-            case 1:
-                XCTAssertEqual(body["installationProof"] as? String, staleProof)
-                return try Self.jsonResponse(
-                    for: request,
-                    status: 401,
-                    body: #"{"error":"Installation continuity proof is required"}"#
-                )
-            case 2:
-                XCTAssertNil(body["installationProof"])
-                return try Self.jsonResponse(
-                    for: request,
-                    status: 201,
-                    jsonObject: [
-                        "token": "replacement-bootstrap-token",
-                        "expiresAt": "2099-01-01T00:00:00Z",
-                        "installationProof": replacementProof,
-                        "telemetryTrust": "untrusted"
-                    ]
-                )
-            default:
-                XCTAssertEqual(body["installationProof"] as? String, replacementProof)
-                return try Self.jsonResponse(
-                    for: request,
-                    status: 200,
-                    jsonObject: [
-                        "token": "replacement-verified-token",
-                        "expiresAt": "2099-01-01T00:00:00Z",
-                        "telemetryTrust": "verified"
-                    ]
-                )
-            }
+            XCTAssertEqual(body["installationProof"] as? String, staleProof)
+            return try Self.jsonResponse(
+                for: request,
+                status: 401,
+                body: #"{"error":"Installation continuity proof is required","code":"installation_proof_required"}"#
+            )
         }
 
-        let session = try await client.refreshSession()
-
-        XCTAssertEqual(session.token, "replacement-verified-token")
-        XCTAssertEqual(requestCount, 3)
+        do {
+            _ = try await client.refreshSession()
+            XCTFail("Expected the rejected proof to fail closed.")
+        } catch {
+            XCTAssertEqual(requestCount, 1)
+        }
+        XCTAssertEqual(ShipyardInstallationIdentifier.continuityProof(
+            baseURL: baseURL,
+            productSlug: productSlug,
+            installationId: installationId
+        ), staleProof)
     }
 
     func testFetchSiteAnalyticsUsesServiceApiTokenAndDecodesHostnames() async throws {
@@ -925,6 +946,7 @@ final class ShipyardKitTests: XCTestCase {
         var sessionWithoutReasonCount = 0
         var roadmapRequestCount = 0
         var engagementRequestCount = 0
+        let continuityProof = "mfp_\(String(repeating: "D", count: 43))"
 
         ShipyardMockURLProtocol.requestHandler = { request in
             guard isOnline else { throw URLError(.notConnectedToInternet) }
@@ -935,8 +957,23 @@ final class ShipyardKitTests: XCTestCase {
                     roadmapDeviceActivityCount += 1
                     XCTAssertNotNil(body["activityDate"] as? String)
                     XCTAssertEqual(body["runtimeEnvironment"] as? String, ShipyardClient.inferredRuntimeEnvironment())
+                    XCTAssertEqual(body["proofPersistence"] as? String, "user_defaults_v1")
+                    XCTAssertEqual(body["installationProof"] as? String, continuityProof)
                 } else {
                     sessionWithoutReasonCount += 1
+                    if body["installationProof"] == nil {
+                        return try Self.jsonResponse(
+                            for: request,
+                            status: 201,
+                            jsonObject: [
+                                "token": "bootstrap-token",
+                                "expiresAt": "2099-01-01T00:00:00Z",
+                                "installationProof": continuityProof,
+                                "telemetryTrust": "untrusted"
+                            ]
+                        )
+                    }
+                    XCTAssertEqual(body["installationProof"] as? String, continuityProof)
                 }
                 return try Self.jsonResponse(
                     for: request,
@@ -970,7 +1007,7 @@ final class ShipyardKitTests: XCTestCase {
         XCTAssertTrue(recovered.isComplete)
         XCTAssertEqual(queuedAfterRecovery, 0)
         XCTAssertEqual(roadmapDeviceActivityCount, 1)
-        XCTAssertEqual(sessionWithoutReasonCount, 1)
+        XCTAssertEqual(sessionWithoutReasonCount, 2)
         XCTAssertEqual(roadmapRequestCount, 1)
         XCTAssertEqual(engagementRequestCount, 1)
     }
@@ -1423,10 +1460,67 @@ final class ShipyardKitTests: XCTestCase {
         XCTAssertEqual(cachedItems?.map(\.id), ["req_cached"])
 
         ShipyardMockURLProtocol.requestHandler = { _ in
-            throw URLError(.notConnectedToInternet)
+            throw URLError(.timedOut)
         }
         let offlineItems = try await client.fetchItems()
         XCTAssertEqual(offlineItems.map(\.id), ["req_cached"])
+    }
+
+    func testTransientReadWithoutCacheUsesFriendlyOfflineError() async throws {
+        let productSlug = "transient-read-no-cache-\(UUID().uuidString)"
+        let client = makeMockClient(productSlug: productSlug)
+        await client.clearOfflineData()
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            try Self.jsonResponse(
+                for: request,
+                status: 503,
+                body: #"{"error":"Shipyard is temporarily unavailable."}"#
+            )
+        }
+
+        do {
+            _ = try await client.fetchItems()
+            XCTFail("Expected offlineCacheUnavailable")
+        } catch ShipyardError.offlineCacheUnavailable {
+            // Expected: a transient backend outage should not expose a raw
+            // server error when this install has no cached content yet.
+        }
+    }
+
+    func testUnauthorizedCachedTokenRefreshesAndRetriesOnce() async throws {
+        let productSlug = "token-refresh-\(UUID().uuidString)"
+        let client = makeMockClient(productSlug: productSlug)
+        await client.clearOfflineData()
+        var sessionCount = 0
+        var requestCount = 0
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            switch request.url?.path {
+            case "/v1/auth/mobile/public-session":
+                sessionCount += 1
+                return try Self.jsonResponse(
+                    for: request,
+                    status: 201,
+                    body: #"{"token":"token-\#(sessionCount)","expiresAt":"2099-01-01T00:00:00Z"}"#
+                )
+            case "/v1/engagement/asks":
+                requestCount += 1
+                if requestCount == 1 {
+                    XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token-1")
+                    return try Self.jsonResponse(for: request, status: 401, body: #"{"error":"Expired"}"#)
+                }
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token-2")
+                return try Self.jsonResponse(for: request, status: 200, body: #"{"asks":[]}"#)
+            default:
+                return try Self.jsonResponse(for: request, status: 404, body: #"{"error":"not found"}"#)
+            }
+        }
+
+        let asks = try await client.fetchAsks()
+        XCTAssertTrue(asks.isEmpty)
+        XCTAssertEqual(sessionCount, 2)
+        XCTAssertEqual(requestCount, 2)
     }
 
     func testOfflineWriteQueuesAndFlushesWhenOnline() async throws {
@@ -1435,7 +1529,7 @@ final class ShipyardKitTests: XCTestCase {
         await client.clearOfflineData()
 
         ShipyardMockURLProtocol.requestHandler = { _ in
-            throw URLError(.notConnectedToInternet)
+            throw URLError(.networkConnectionLost)
         }
 
         do {
@@ -1472,6 +1566,40 @@ final class ShipyardKitTests: XCTestCase {
         XCTAssertEqual(result.remainingCount, 0)
         let remainingQueuedCount = await client.queuedWriteCount()
         XCTAssertEqual(remainingQueuedCount, 0)
+    }
+
+    func testTransientServerFailureQueuesWrite() async throws {
+        let productSlug = "transient-write-\(UUID().uuidString)"
+        let client = makeMockClient(productSlug: productSlug)
+        await client.clearOfflineData()
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/auth/mobile/public-session")
+            return try Self.jsonResponse(
+                for: request,
+                status: 201,
+                body: #"{"token":"test-token","expiresAt":"2099-01-01T00:00:00Z"}"#
+            )
+        }
+        _ = try await client.refreshSession()
+
+        ShipyardMockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/requests")
+            return try Self.jsonResponse(
+                for: request,
+                status: 503,
+                body: #"{"error":"Shipyard is temporarily unavailable."}"#
+            )
+        }
+
+        do {
+            _ = try await client.submitItem(title: "Queued during maintenance", description: nil)
+            XCTFail("Expected offlineQueued")
+        } catch ShipyardError.offlineQueued {
+            // Expected: retryable server failures preserve the write locally.
+        }
+        let queuedCount = await client.queuedWriteCount()
+        XCTAssertEqual(queuedCount, 1)
     }
 
     private func makeMockClient(productSlug: String) -> ShipyardClient {

@@ -10,10 +10,11 @@
     "productStatus": "ShipyardKit mobile sessions work for app products in any status; the product does not need to be live before testing."
   },
   "notes": {
-    "installationIdStrategy": "stable per-install UUID stored in UserDefaults only; never store, read, or migrate the installation identifier through Keychain",
+    "installationIdStrategy": "stable per-install UUID stored in UserDefaults only; all ShipyardKit continuity persistence is UserDefaults-only",
     "appVersionSource": "CFBundleShortVersionString",
     "buildNumberSource": "CFBundleVersion",
     "shipyardKitVersionSource": "ShipyardClient.sdkVersion",
+    "supportEmailPrivacy": "Do not include the ShipyardKit/SDK version, installation id, continuity proof, or session token in an end-user support email.",
     "dailySync": "Call client.syncDaily() on launch and foreground resume. It coordinates Roadmap, Engagement, queued writes, and Device Activity once per UTC day, with same-day retry for incomplete content.",
     "roadmapOpenRefresh": "When the user opens Roadmap, render cachedItems() immediately if available, then call normal pullRoadmapDaily() and update the visible Roadmap only when fresh content is returned. Do not use force: true for ordinary opens.",
     "roadmapPageFormat": "Roadmap should open as a page in Settings or the nearest equivalent app area. It should let users submit Feature or Bug Fix requests, list active public items in their current status, and use an actual tappable upvote button on each item.",

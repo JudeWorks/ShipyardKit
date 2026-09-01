@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.25.3 — 2026-08-31
+
+- Removed all Apple credential-store framework imports and calls. The stable
+  installation helper and scoped continuity proof now persist exclusively in
+  app-local `UserDefaults`.
+- Added a one-time Cloudflare continuity transition so verified 0.25.2 installs
+  can move to UserDefaults persistence without entering a repeated 401 loop.
+  This does not require a PostgreSQL migration; after the exchange, proof
+  omission fails closed again.
+- Made 0.25.3 the first Cloudflare-only SDK release. The server routes 0.25.3+
+  to D1 and a per-workspace SQLite Durable Object without Neon fallback, while
+  0.25.2 and older remain on the legacy Neon compatibility path.
+- Made the support-email privacy boundary explicit: the host app version/build
+  may be included, but ShipyardKit/SDK version and installation/session values
+  must remain out of customer-visible email.
+- Made offline replay reentrancy-safe so writes queued while a flush is waiting
+  on the network cannot be overwritten, and report success only after the
+  queue is durably written.
+- Treats retryable HTTP failures such as Cloudflare `503` responses like an
+  offline connection for writes, preserving the change in the durable queue
+  and presenting the non-disruptive saved-offline result to the host app.
+- Treats timeouts, dropped connections, temporarily unavailable resources, and
+  disconnected background sessions as transient: reads retain cached content
+  and writes enter the durable retry queue.
+- Rehydrates queued Device Activity with the current continuity proof, and
+  invalidates/retries a cached session token once after a 401 response.
+
 ## 0.25.2 — 2026-08-31
 
 - Scoped installation continuity proofs to the stable installation identifier,
@@ -41,8 +68,8 @@
 
 ## 0.2.4 — 2026-07-16
 
-- Added a server-issued, device-only installation continuity proof for mobile
-  sessions. ShipyardKit stores the proof in the Keychain and immediately
+- Added a server-issued, app-local installation continuity proof for mobile
+  sessions. ShipyardKit persists the proof and immediately
   exchanges a bootstrap session for a continuity-verified session.
 - Added recovery for installations that received and discarded a bootstrap
   proof before proof-capable ShipyardKit code was available.
@@ -72,9 +99,9 @@
   happens offline, the check-in is queued with its UTC day and delivered on
   the next connection (`activityDate`, accepted by the server up to 2 days
   late).
-- New `ShipyardInstallationIdentifier.stable()` Keychain-backed install id
-  helper (with UserDefaults migration + fallback) so reinstalls do not mint
-  a new "device". The README and example now use it.
+- Added the first `ShipyardInstallationIdentifier.stable()` install-id helper.
+  The current implementation is UserDefaults-only and intentionally follows
+  the app installation lifecycle.
 - Note: `pullCount` on daily activity rows counts session refreshes for the
   day, not roadmap fetches.
 

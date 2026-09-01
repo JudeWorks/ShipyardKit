@@ -3,11 +3,13 @@ name: Swift Tests
 on:
   push:
     paths:
+      - 'VERSION'
       - 'swift/**'
       - 'scripts/test-swift-package.sh'
       - '.github/workflows/swift-tests.yml'
   pull_request:
     paths:
+      - 'VERSION'
       - 'swift/**'
       - 'scripts/test-swift-package.sh'
       - '.github/workflows/swift-tests.yml'

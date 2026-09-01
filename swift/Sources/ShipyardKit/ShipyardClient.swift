@@ -1,5 +1,4 @@
 import Foundation
-import Security
 import CryptoKit
 import Network
 #if canImport(UIKit)
@@ -1451,6 +1450,7 @@ public enum ShipyardError: Error, LocalizedError {
     case decodingFailed
     case missingToken
     case offlineQueued
+    case offlineQueueUnavailable
     case offlineCacheUnavailable
 
     public var errorDescription: String? {
@@ -1465,6 +1465,8 @@ public enum ShipyardError: Error, LocalizedError {
             return "Missing Shipyard token."
         case .offlineQueued:
             return "Saved offline. This change is queued and will sync automatically when Shipyard is online."
+        case .offlineQueueUnavailable:
+            return "Shipyard is offline and could not safely save this change. Please try again when the connection returns."
         case .offlineCacheUnavailable:
             return "Shipyard is offline and no cached data is available yet."
         }
@@ -1578,6 +1580,12 @@ private actor SessionStore {
     func set(token: String, expiresAt: Date) {
         self.token = token
         self.expiresAt = expiresAt
+    }
+
+    func clear(ifMatches expectedToken: String? = nil) {
+        if let expectedToken, token != expectedToken { return }
+        token = nil
+        expiresAt = nil
     }
 }
 
@@ -1714,6 +1722,7 @@ private actor ShipyardOfflineWriteQueue {
 
     private var isLoaded = false
     private var entries: [ShipyardQueuedWrite] = []
+    private var flushingScopes: Set<ShipyardClientScope> = []
     private let fileURL: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -1742,6 +1751,7 @@ private actor ShipyardOfflineWriteQueue {
         return entries.filter { $0.scope == scope }.count
     }
 
+    @discardableResult
     func enqueue(
         scope: ShipyardClientScope,
         path: String,
@@ -1749,60 +1759,75 @@ private actor ShipyardOfflineWriteQueue {
         queryItems: [URLQueryItem],
         body: Data?,
         contentType: String?
-    ) {
+    ) -> Bool {
         loadIfNeeded()
-        entries.append(
-            ShipyardQueuedWrite(
-                scope: scope,
-                path: path,
-                method: method,
-                queryItems: queryItems,
-                body: body,
-                contentType: contentType
-            )
+        let entry = ShipyardQueuedWrite(
+            scope: scope,
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            body: body,
+            contentType: contentType
         )
-        persist()
+        entries.append(entry)
+        guard persist() else {
+            entries.removeAll { $0.id == entry.id }
+            return false
+        }
+        return true
     }
 
     func flush(using client: ShipyardClient) async -> ShipyardOfflineSyncResult {
         loadIfNeeded()
         let scope = client.offlineScope
-        guard entries.contains(where: { $0.scope == scope }) else {
-            return ShipyardOfflineSyncResult(flushedCount: 0, remainingCount: entries.count)
+        guard !flushingScopes.contains(scope) else {
+            return ShipyardOfflineSyncResult(
+                flushedCount: 0,
+                remainingCount: entries.filter { $0.scope == scope }.count
+            )
         }
+        guard entries.contains(where: { $0.scope == scope }) else {
+            return ShipyardOfflineSyncResult(flushedCount: 0, remainingCount: 0)
+        }
+        flushingScopes.insert(scope)
+        defer { flushingScopes.remove(scope) }
 
         var flushedCount = 0
         var droppedCount = 0
-        var remaining: [ShipyardQueuedWrite] = []
         var stoppedReplayingCurrentScope = false
+        let replayIDs = entries.filter { $0.scope == scope }.map(\.id)
 
-        for var entry in entries {
-            guard entry.scope == scope, !stoppedReplayingCurrentScope else {
-                remaining.append(entry)
-                continue
-            }
+        for entryID in replayIDs {
+            guard !stoppedReplayingCurrentScope,
+                  var entry = entries.first(where: { $0.id == entryID })
+            else { continue }
 
             do {
                 try await client.replayQueuedWrite(entry)
                 flushedCount += 1
+                entries.removeAll { $0.id == entryID }
+                _ = persist()
             } catch {
                 entry.attempts += 1
                 entry.lastError = error.localizedDescription
 
                 if Self.shouldDropQueuedWrite(after: error) {
                     droppedCount += 1
+                    entries.removeAll { $0.id == entryID }
+                    _ = persist()
                     continue
                 }
 
-                remaining.append(entry)
+                if let index = entries.firstIndex(where: { $0.id == entryID }) {
+                    entries[index] = entry
+                    _ = persist()
+                }
                 if ShipyardClient.isConnectivityError(error) || Self.isAuthorizationError(error) || Self.isRetryableServerError(error) {
                     stoppedReplayingCurrentScope = true
                 }
             }
         }
 
-        entries = remaining
-        persist()
         return ShipyardOfflineSyncResult(
             flushedCount: flushedCount,
             droppedCount: droppedCount,
@@ -1817,7 +1842,7 @@ private actor ShipyardOfflineWriteQueue {
         } else {
             entries.removeAll()
         }
-        persist()
+        _ = persist()
     }
 
     private func loadIfNeeded() {
@@ -1827,9 +1852,14 @@ private actor ShipyardOfflineWriteQueue {
         entries = (try? decoder.decode([ShipyardQueuedWrite].self, from: data)) ?? []
     }
 
-    private func persist() {
-        guard let data = try? encoder.encode(entries) else { return }
-        try? data.write(to: fileURL, options: [.atomic])
+    private func persist() -> Bool {
+        guard let data = try? encoder.encode(entries) else { return false }
+        do {
+            try data.write(to: fileURL, options: [.atomic])
+            return true
+        } catch {
+            return false
+        }
     }
 
     private static func isAuthorizationError(_ error: Error) -> Bool {
@@ -1867,63 +1897,44 @@ private final class ShipyardConnectivityMonitor: @unchecked Sendable {
     }
 }
 
-/// Stable per-install identifier persisted in the Keychain so it survives
-/// app reinstalls and OS restores that keep the keychain. Falls back to a
-/// UserDefaults-persisted UUID when the Keychain is unavailable. Using this
-/// keeps "active device" counts honest: a reinstall does not mint a new
-/// device.
+/// Stable per-install identifier persisted only in the app's UserDefaults.
+/// The identifier intentionally follows the app's installation lifecycle.
 public enum ShipyardInstallationIdentifier {
     public static func stable(
         service: String = "ShipyardKit",
         account: String = "installation-id",
         userDefaults: UserDefaults = .standard
     ) -> String {
-        let defaultsKey = "shipyardkit_installation_id"
-        if let existing = readKeychain(service: service, account: account), !existing.isEmpty {
-            // Upgrade legacy entries to device-only accessibility so device
-            // restore cannot clone a telemetry installation identity.
-            _ = writeKeychain(service: service, account: account, value: existing)
+        let defaultsKey = defaultsStorageKey(
+            namespace: "ShipyardKit.InstallationIdentifier",
+            components: [service, account]
+        )
+        if let existing = userDefaults.string(forKey: defaultsKey), !existing.isEmpty {
             return existing
         }
-        if let fallback = userDefaults.string(forKey: defaultsKey), !fallback.isEmpty {
-            // Migrate a pre-Keychain id forward so the device identity is kept.
-            _ = writeKeychain(service: service, account: account, value: fallback)
-            return fallback
+        let originalDefaultsKey = "shipyardkit_installation_id"
+        if let existing = userDefaults.string(forKey: originalDefaultsKey), !existing.isEmpty {
+            userDefaults.set(existing, forKey: defaultsKey)
+            return existing
         }
         let generated = UUID().uuidString
-        if !writeKeychain(service: service, account: account, value: generated) {
-            userDefaults.set(generated, forKey: defaultsKey)
-        }
+        userDefaults.set(generated, forKey: defaultsKey)
         return generated
     }
 
-    static func continuityProof(baseURL: URL, productSlug: String, installationId: String) -> String? {
-        let scopedAccount = continuityProofAccount(
+    static func continuityProof(
+        baseURL: URL,
+        productSlug: String,
+        installationId: String,
+        userDefaults: UserDefaults = .standard
+    ) -> String? {
+        let value = userDefaults.string(forKey: continuityProofDefaultsKey(
             baseURL: baseURL,
             productSlug: productSlug,
             installationId: installationId
-        )
-        if let scoped = readKeychain(
-            service: "ShipyardKit.InstallationContinuity",
-            account: scopedAccount
-        ) {
-            return scoped
-        }
-
-        // Migrate proofs written by ShipyardKit 0.25.0 and earlier.
-        let legacyAccount = legacyContinuityProofAccount(baseURL: baseURL, productSlug: productSlug)
-        guard let legacy = readKeychain(
-            service: "ShipyardKit.InstallationContinuity",
-            account: legacyAccount
-        ) else {
-            return nil
-        }
-        _ = writeKeychain(
-            service: "ShipyardKit.InstallationContinuity",
-            account: scopedAccount,
-            value: legacy
-        )
-        return legacy
+        ))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value, value.hasPrefix("mfp_"), value.count == 47 else { return nil }
+        return value
     }
 
     @discardableResult
@@ -1931,99 +1942,72 @@ public enum ShipyardInstallationIdentifier {
         _ proof: String,
         baseURL: URL,
         productSlug: String,
-        installationId: String
+        installationId: String,
+        userDefaults: UserDefaults = .standard
     ) -> Bool {
         let trimmed = proof.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("mfp_"), trimmed.count == 47 else { return false }
-        return writeKeychain(
-            service: "ShipyardKit.InstallationContinuity",
-            account: continuityProofAccount(
-                baseURL: baseURL,
-                productSlug: productSlug,
-                installationId: installationId
-            ),
-            value: trimmed
+        let key = continuityProofDefaultsKey(
+            baseURL: baseURL,
+            productSlug: productSlug,
+            installationId: installationId
         )
+        userDefaults.set(trimmed, forKey: key)
+        return userDefaults.string(forKey: key) == trimmed
     }
 
     static func clearContinuityProof(
         baseURL: URL,
         productSlug: String,
         installationId: String,
-        includingLegacy: Bool
+        includingLegacy: Bool,
+        userDefaults: UserDefaults = .standard
     ) {
-        deleteKeychain(
-            service: "ShipyardKit.InstallationContinuity",
-            account: continuityProofAccount(
-                baseURL: baseURL,
-                productSlug: productSlug,
-                installationId: installationId
-            )
-        )
+        userDefaults.removeObject(forKey: continuityProofDefaultsKey(
+            baseURL: baseURL,
+            productSlug: productSlug,
+            installationId: installationId
+        ))
         if includingLegacy {
-            deleteKeychain(
-                service: "ShipyardKit.InstallationContinuity",
-                account: legacyContinuityProofAccount(baseURL: baseURL, productSlug: productSlug)
-            )
+            userDefaults.removeObject(forKey: legacyContinuityProofDefaultsKey(
+                baseURL: baseURL,
+                productSlug: productSlug
+            ))
         }
     }
 
-    private static func legacyContinuityProofAccount(baseURL: URL, productSlug: String) -> String {
+    private static func legacyContinuityProofDefaultsKey(baseURL: URL, productSlug: String) -> String {
         let origin = baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return "\(origin)|\(productSlug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+        return defaultsStorageKey(
+            namespace: "ShipyardKit.InstallationContinuity.Legacy",
+            components: [origin, productSlug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()]
+        )
     }
 
-    private static func continuityProofAccount(
+    private static func continuityProofDefaultsKey(
         baseURL: URL,
         productSlug: String,
         installationId: String
     ) -> String {
-        let legacy = legacyContinuityProofAccount(baseURL: baseURL, productSlug: productSlug)
-        return "\(legacy)|\(installationId.trimmingCharacters(in: .whitespacesAndNewlines))"
+        let origin = baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return defaultsStorageKey(
+            namespace: "ShipyardKit.InstallationContinuity",
+            components: [
+                origin,
+                productSlug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                installationId.trimmingCharacters(in: .whitespacesAndNewlines)
+            ]
+        )
     }
 
-    private static func readKeychain(service: String, account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let value = String(data: data, encoding: .utf8)
-        else { return nil }
-        return value
-    }
-
-    private static func writeKeychain(service: String, account: String, value: String) -> Bool {
-        guard let data = value.data(using: .utf8) else { return false }
-        let baseQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(baseQuery as CFDictionary)
-        var addQuery = baseQuery
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
-    }
-
-    private static func deleteKeychain(service: String, account: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(query as CFDictionary)
+    private static func defaultsStorageKey(namespace: String, components: [String]) -> String {
+        let digest = SHA256.hash(data: Data(components.joined(separator: "\n").utf8))
+        return "\(namespace).\(digest.map { String(format: "%02x", $0) }.joined())"
     }
 }
 
 public final class ShipyardClient: @unchecked Sendable {
-    public static let sdkVersion = "0.25.2"
+    public static let sdkVersion = "0.25.3"
     public static let apiContractVersion = "1"
     public static let engagementReadCacheTTL: TimeInterval = 15 * 60
 
@@ -3031,10 +3015,12 @@ public final class ShipyardClient: @unchecked Sendable {
             } catch {
                 // Queue the one Device Activity with its original UTC day, but
                 // leave the Roadmap pull incomplete so content retries later.
-                if Self.isConnectivityError(error) {
-                    await enqueueOfflineDailyDeviceActivity(dayKey: dayKey, reason: "roadmap_pull")
-                    userDefaults.set(dayKey, forKey: deviceActivityKey)
-                    throw ShipyardError.offlineQueued
+                if Self.isTransientSessionError(error) {
+                    if await enqueueOfflineDailyDeviceActivity(dayKey: dayKey, reason: "roadmap_pull") {
+                        userDefaults.set(dayKey, forKey: deviceActivityKey)
+                        throw ShipyardError.offlineQueued
+                    }
+                    throw ShipyardError.offlineQueueUnavailable
                 }
                 throw error
             }
@@ -3064,15 +3050,16 @@ public final class ShipyardClient: @unchecked Sendable {
         return updates
     }
 
-    private func enqueueOfflineDailyDeviceActivity(dayKey: String, reason: String) async {
+    private func enqueueOfflineDailyDeviceActivity(dayKey: String, reason: String) async -> Bool {
         let installationId = installationIdProvider().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !installationId.isEmpty else { return }
+        guard !installationId.isEmpty else { return false }
         var body: [String: String] = [
             "productSlug": productSlug,
             "installationId": installationId,
             "platform": platform,
             "shipyardKitVersion": Self.sdkVersion,
             "runtimeEnvironment": runtimeEnvironment,
+            "proofPersistence": "user_defaults_v1",
             "sessionReason": reason,
             "activityDate": dayKey
         ]
@@ -3089,8 +3076,8 @@ public final class ShipyardClient: @unchecked Sendable {
         ) {
             body["installationProof"] = proof
         }
-        guard let data = try? encoder.encode(body) else { return }
-        await offlineWriteQueue.enqueue(
+        guard let data = try? encoder.encode(body) else { return false }
+        return await offlineWriteQueue.enqueue(
             scope: offlineScope,
             path: "v1/auth/mobile/public-session",
             method: "POST",
@@ -3103,15 +3090,13 @@ public final class ShipyardClient: @unchecked Sendable {
     public func refreshSession() async throws -> ShipyardSessionInfo {
         try await refreshSession(
             reason: nil,
-            continuityUpgradeAttempted: false,
-            staleProofRecoveryAttempted: false
+            continuityUpgradeAttempted: false
         )
     }
 
     private func refreshSession(
         reason: String?,
-        continuityUpgradeAttempted: Bool = false,
-        staleProofRecoveryAttempted: Bool = false
+        continuityUpgradeAttempted: Bool = false
     ) async throws -> ShipyardSessionInfo {
         let installationId = installationIdProvider().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !installationId.isEmpty else {
@@ -3129,7 +3114,8 @@ public final class ShipyardClient: @unchecked Sendable {
                 "installationId": installationId,
                 "platform": platform,
                 "shipyardKitVersion": Self.sdkVersion,
-                "runtimeEnvironment": runtimeEnvironment
+                "runtimeEnvironment": runtimeEnvironment,
+                "proofPersistence": "user_defaults_v1"
             ]
             if let appVersion = appVersionProvider(), !appVersion.isEmpty {
                 body["appVersion"] = appVersion
@@ -3163,21 +3149,6 @@ public final class ShipyardClient: @unchecked Sendable {
             try validateStatus(data: firstData, response: firstResponse)
             responseData = firstData
         } catch {
-            if continuityProof != nil,
-               !staleProofRecoveryAttempted,
-               Self.isContinuityProofRejection(error) {
-                ShipyardInstallationIdentifier.clearContinuityProof(
-                    baseURL: baseURL,
-                    productSlug: productSlug,
-                    installationId: installationId,
-                    includingLegacy: true
-                )
-                return try await refreshSession(
-                    reason: reason,
-                    continuityUpgradeAttempted: false,
-                    staleProofRecoveryAttempted: true
-                )
-            }
             guard Self.isTransientSessionError(error) else { throw error }
             let jitterNanos = UInt64.random(in: 0...400_000_000)
             try? await Task.sleep(nanoseconds: 600_000_000 + jitterNanos)
@@ -3207,8 +3178,7 @@ public final class ShipyardClient: @unchecked Sendable {
             // Exchange its server-issued proof immediately.
             return try await refreshSession(
                 reason: reason,
-                continuityUpgradeAttempted: true,
-                staleProofRecoveryAttempted: staleProofRecoveryAttempted
+                continuityUpgradeAttempted: true
             )
         }
         await sessionStore.set(token: decoded.token, expiresAt: expiresAtDate)
@@ -3231,7 +3201,7 @@ public final class ShipyardClient: @unchecked Sendable {
                let cached = await cache.data(for: key) {
                 return cached
             }
-            if Self.isConnectivityError(error) {
+            if Self.isTransientSessionError(error) {
                 throw ShipyardError.offlineCacheUnavailable
             }
             throw error
@@ -3251,8 +3221,11 @@ public final class ShipyardClient: @unchecked Sendable {
             return cached
         }
         do {
-            let token = try await ensureSessionToken()
-            let data = try await sendRequest(path: path, method: "GET", token: token, queryItems: queryItems)
+            let data = try await authenticatedRequest(
+                path: path,
+                method: "GET",
+                queryItems: queryItems
+            )
             await cache.store(data, for: key)
             return data
         } catch {
@@ -3261,7 +3234,7 @@ public final class ShipyardClient: @unchecked Sendable {
                let cached = await cache.data(for: key) {
                 return cached
             }
-            if Self.isConnectivityError(error) {
+            if Self.isTransientSessionError(error) {
                 throw ShipyardError.offlineCacheUnavailable
             }
             throw error
@@ -3275,17 +3248,15 @@ public final class ShipyardClient: @unchecked Sendable {
         queryItems: [URLQueryItem] = []
     ) async throws -> Data {
         do {
-            let token = try await ensureSessionToken()
-            return try await sendRequest(
+            return try await authenticatedRequest(
                 path: path,
                 method: method,
-                token: token,
                 body: body,
                 queryItems: queryItems
             )
         } catch {
-            if Self.isConnectivityError(error) {
-                await offlineWriteQueue.enqueue(
+            if Self.isTransientSessionError(error) {
+                let saved = await offlineWriteQueue.enqueue(
                     scope: offlineScope,
                     path: path,
                     method: method,
@@ -3293,22 +3264,70 @@ public final class ShipyardClient: @unchecked Sendable {
                     body: body,
                     contentType: body == nil ? nil : "application/json"
                 )
-                throw ShipyardError.offlineQueued
+                throw saved ? ShipyardError.offlineQueued : ShipyardError.offlineQueueUnavailable
             }
             throw error
         }
     }
 
     fileprivate func replayQueuedWrite(_ entry: ShipyardQueuedWrite) async throws {
-        let token = try await ensureSessionToken()
-        _ = try await sendRequest(
+        var replayBody = entry.body
+        if entry.path == "v1/auth/mobile/public-session",
+           let originalBody = entry.body,
+           var sessionBody = try? decoder.decode([String: String].self, from: originalBody) {
+            // Establish or refresh continuity before replay, then replace any
+            // queued proof with the current UserDefaults value. A first-ever
+            // offline launch therefore cannot strand a proof-less activity
+            // request after the installation becomes verified.
+            _ = try await ensureSessionToken()
+            let installationId = installationIdProvider().trimmingCharacters(in: .whitespacesAndNewlines)
+            sessionBody["proofPersistence"] = "user_defaults_v1"
+            sessionBody["installationProof"] = ShipyardInstallationIdentifier.continuityProof(
+                baseURL: baseURL,
+                productSlug: productSlug,
+                installationId: installationId
+            )
+            replayBody = try encoder.encode(sessionBody)
+        }
+        _ = try await authenticatedRequest(
             path: entry.path,
             method: entry.method,
-            token: token,
-            body: entry.body,
+            body: replayBody,
             queryItems: entry.queryItems.map(\.urlQueryItem),
             contentType: entry.contentType
         )
+    }
+
+    private func authenticatedRequest(
+        path: String,
+        method: String,
+        body: Data? = nil,
+        queryItems: [URLQueryItem] = [],
+        contentType: String? = nil
+    ) async throws -> Data {
+        let token = try await ensureSessionToken()
+        do {
+            return try await sendRequest(
+                path: path,
+                method: method,
+                token: token,
+                body: body,
+                queryItems: queryItems,
+                contentType: contentType
+            )
+        } catch {
+            guard Self.isUnauthorized(error) else { throw error }
+            await sessionStore.clear(ifMatches: token)
+            let refreshedToken = try await refreshSessionToken()
+            return try await sendRequest(
+                path: path,
+                method: method,
+                token: refreshedToken,
+                body: body,
+                queryItems: queryItems,
+                contentType: contentType
+            )
+        }
     }
 
     private func sendRequest(
@@ -3412,7 +3431,7 @@ public final class ShipyardClient: @unchecked Sendable {
         guard case ShipyardError.server(_, let status) = error else {
             return false
         }
-        return status == 408 || status == 425 || status == 429 || status >= 500
+        return status == 401 || status == 403 || status == 408 || status == 425 || status == 429 || status >= 500
     }
 
     private static func isAuthorizationError(_ error: Error) -> Bool {
@@ -3420,6 +3439,11 @@ public final class ShipyardClient: @unchecked Sendable {
             return false
         }
         return status == 401 || status == 403
+    }
+
+    private static func isUnauthorized(_ error: Error) -> Bool {
+        guard case ShipyardError.server(_, let status) = error else { return false }
+        return status == 401
     }
 
     fileprivate static func isTransientSessionError(_ error: Error) -> Bool {
@@ -3430,13 +3454,6 @@ public final class ShipyardClient: @unchecked Sendable {
         return status == 408 || status == 425 || status == 429 || status >= 500
     }
 
-    fileprivate static func isContinuityProofRejection(_ error: Error) -> Bool {
-        guard case ShipyardError.server(let message, let status) = error, status == 401 else {
-            return false
-        }
-        return message.localizedCaseInsensitiveContains("continuity proof")
-    }
-
     fileprivate static func isConnectivityError(_ error: Error) -> Bool {
         let nsError = error as NSError
         guard nsError.domain == NSURLErrorDomain else {
@@ -3445,10 +3462,15 @@ public final class ShipyardClient: @unchecked Sendable {
         let code = URLError.Code(rawValue: nsError.code)
 
         switch code {
-        case .notConnectedToInternet,
+        case .timedOut,
+             .networkConnectionLost,
+             .notConnectedToInternet,
              .cannotFindHost,
              .cannotConnectToHost,
              .dnsLookupFailed,
+             .resourceUnavailable,
+             .cannotLoadFromNetwork,
+             .backgroundSessionWasDisconnected,
              .internationalRoamingOff,
              .dataNotAllowed:
             return true

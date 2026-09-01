@@ -2,12 +2,14 @@
 
 `ShipyardKit` is the Swift package product developers add to Apple apps for daily Roadmap pull visibility, Announcements, Ask, and Roadmap flows backed by Shipyard. It also includes service-token APIs for native admin tools, including Mac planner apps.
 
-Current SDK version: `0.25.2`.
+Current SDK version: `0.25.3`.
 
-Version 0.25.2 declares ShipyardKit API contract version 1 on every request.
-The SDK remains database-provider-neutral: apps call Shipyard's HTTP API and do
-not connect to Neon, D1, Durable Objects, or R2 directly. Existing 0.25.0 apps
-remain supported without an integration change.
+Version 0.25.3 declares ShipyardKit API contract version 1 on every request.
+Apps remain database-provider-neutral and call only Shipyard's HTTPS API, but
+the server route for 0.25.3 and newer is Cloudflare-specific: D1 routes each
+workspace to its SQLite Durable Object, with R2 and Queues for supporting data.
+There is no Neon fallback for 0.25.3+. Existing 0.25.2 and older apps remain on
+the legacy Neon compatibility route during the upgrade window.
 
 ## Install via Swift Package Manager
 
@@ -52,7 +54,7 @@ Before wiring the app, confirm the Shipyard product exists in the workspace and 
 19. Show `item.targetDateLabel` and `item.developerRespondedAtRelativeLabel()` when present.
 20. Call `submitItem(title:description:itemType:)` to create a moderated item.
 21. Call `vote(itemId:unvote:)` for voting.
-22. Treat `ShipyardError.offlineQueued` as a successful local save. The SDK persists the write and automatically retries when the device is online again.
+22. Treat `ShipyardError.offlineQueued` as a successful local save. The SDK emits it only after the durable queue write succeeds and automatically retries when the device is online again. `offlineQueueUnavailable` means the change was not safely stored and the UI should ask the user to retry later.
 
 ## Upgrade From 0.2.5 To 0.25.0
 
@@ -168,7 +170,7 @@ If the app uses `ShipyardKit/swift` as a local Swift package, keep that folder i
 
 ## Public API
 
-The host app should provide a stable UUID from `UserDefaults`. Never read, write, or migrate the installation identifier through Keychain, and do not use the Keychain-backed `ShipyardInstallationIdentifier.stable()` helper.
+The host app should provide a stable UUID from `UserDefaults`, or use the UserDefaults-only `ShipyardInstallationIdentifier.stable()` helper. ShipyardKit also persists its scoped continuity proof only in app-local `UserDefaults`.
 
 ```swift
 func stableInstallationId() -> String {

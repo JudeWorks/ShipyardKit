@@ -13,8 +13,9 @@
   "platform": "ios",
   "appVersion": "1.0.2",
   "buildNumber": "102",
-  "shipyardKitVersion": "0.25.2",
+  "shipyardKitVersion": "0.25.3",
   "runtimeEnvironment": "physical_device",
+  "proofPersistence": "user_defaults_v1",
   "sessionReason": "roadmap_pull",
   "activityDate": "2026-05-13"
 }
@@ -40,19 +41,26 @@
     "platform": "ios",
     "appVersion": "1.0.2",
     "buildNumber": "102",
-    "shipyardKitVersion": "0.25.2",
+    "shipyardKitVersion": "0.25.3",
     "runtimeEnvironment": "physical_device"
   }
 }
 ```
 
-ShipyardKit 0.25.2 sends `X-ShipyardKit-Version: 0.25.2` and
+ShipyardKit 0.25.3 sends `X-ShipyardKit-Version: 0.25.3` and
 `X-ShipyardKit-Contract-Version: 1` on SDK requests. The server returns
 `X-ShipyardKit-Contract-Version: 1` on `/v1` responses. Contract version 1 is
-the stable HTTP/JSON boundary: Neon PostgreSQL, Cloudflare D1, Durable Objects,
-and R2 are implementation details and must return the same documented status
-codes and response bodies. Servers must continue accepting ShipyardKit 0.25.0
-requests that do not include the contract-version header.
+the stable HTTP/JSON boundary. ShipyardKit 0.25.3 and newer is served only by
+Cloudflare D1, per-workspace SQLite Durable Objects, R2, and Queues; it must not
+fall back to Neon. ShipyardKit 0.25.2 and older remains on the legacy Neon path
+during the compatibility window. Both providers must return the same documented
+status codes and response bodies for the SDK versions assigned to them.
+
+If the Cloudflare target is unavailable, a 0.25.3+ request receives a bounded
+retryable response rather than a Neon response. The SDK may continue with
+cached content or its durable offline queue. Missing, malformed, or legacy SDK
+version headers are never treated as permission to enter the 0.25.3 Cloudflare
+path.
 
 `runtimeEnvironment` is compile-time metadata with supported values `simulator`
 and `physical_device`; legacy or unsupported values are stored as `unknown`.
@@ -61,12 +69,16 @@ and primary Device Activity metrics.
 
 On the first request for an installation, omit `installationProof`. The server
 returns an untrusted, read-only bootstrap session plus a one-time proof.
-ShipyardKit stores that proof with device-only Keychain accessibility and
+ShipyardKit stores that proof only in app-local `UserDefaults` and
 immediately repeats the session request with `installationProof`; the verified
 response returns `installationProof: null` and the normal public scopes. A
 never-verified installation may restart this bootstrap if an older SDK
 discarded its original proof, but a verified installation cannot rotate its
-proof by omitting it.
+proof by omitting it. An existing verified installation may transition once
+from the legacy proof-persistence generation by sending
+`proofPersistence: "user_defaults_v1"` without a proof. The server returns a
+new untrusted bootstrap proof, records the new generation, and rejects any
+later attempt to repeat that migration.
 
 `pullRoadmapDaily()` maps to this endpoint and then reads `GET /v1/requests`. The SDK sends `sessionReason: "roadmap_pull"` when it refreshes the mobile session for that daily read. Shipyard records one app/platform/version activity row per UTC day per install, so the site can show which apps are using the Roadmap pull without presenting it as a separate outbound signal.
 
@@ -77,6 +89,7 @@ The target product must be an app product, but it does not need to be live. Ship
 ### Errors
 
 - `400`: invalid body or missing required fields
+- `401`: an existing installation supplied no valid continuity proof and is not eligible for bootstrap or its one-time persistence migration
 - `403`: product is not an app product
 - `404`: product not found
 - `429`: rate limited

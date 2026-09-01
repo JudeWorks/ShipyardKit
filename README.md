@@ -4,13 +4,15 @@ ShipyardKit is the Swift package and setup bundle for adding Shipyard-powered an
 
 It also exposes service-token APIs for native admin tools, including a Mac planner surface that can list products, load release-grouped planner items, update working versions, manage internal planner items, and edit planning tasks.
 
-Current SDK version: `0.25.2`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
+Current SDK version: `0.25.3`. Update `VERSION` and `ShipyardClient.sdkVersion` every time the SDK changes; `scripts/bump-version.mjs` does both and opens a changelog entry.
 
 ShipyardKit depends on the versioned Shipyard HTTP/JSON API, not on a database
-driver. Version 0.25.2 declares API contract version 1 on its requests, allowing
-the Shipyard server to move between Neon PostgreSQL and Cloudflare-backed
-storage without requiring another app release. Existing 0.25.0 apps remain
-supported and may omit the contract header.
+driver. Version 0.25.3 declares API contract version 1 and is the first
+Cloudflare-only SDK release: its requests are served by Cloudflare D1,
+per-workspace SQLite Durable Objects, R2, and Queues. The app still calls the
+same Shipyard HTTPS origin and never receives database credentials. ShipyardKit
+0.25.2 and older remain on the legacy Neon compatibility path during the app
+upgrade window.
 
 Zip and hand off the top-level `ShipyardKit/` folder. That folder is the complete distributable package for a developer or installer.
 
@@ -66,7 +68,7 @@ Use the three-row Support pattern by default, styled with the host app's existin
 - It does not require user sign-in.
 - It does not embed admin keys, service keys, or API tokens in the app.
 - It does not publish submissions publicly before review.
-- It does not manage service API token storage for native admin/planner apps. Store those tokens in the host app's secure account/keychain layer and pass them explicitly to service-token methods.
+- It does not manage service API token storage for native admin/planner apps. Keep those tokens entirely in the host app's own credential-storage layer and pass them explicitly to service-token methods.
 
 ## Package Contents
 
@@ -87,6 +89,13 @@ Use the three-row Support pattern by default, styled with the host app's existin
 ## Server Requirements
 
 Your Shipyard backend must support:
+
+- Hard provider routing by validated SDK version: `0.25.3` and newer must use
+  Cloudflare and must never fall back to Neon; `0.25.2` and older remain on the
+  legacy Neon route during the compatibility window.
+- A bounded retryable failure when the `0.25.3+` Cloudflare target is
+  unavailable, allowing cached reads and durable offline writes to preserve the
+  user experience.
 
 - ShipyardKit API contract version 1. The server must also accept legacy 0.25.0
   requests that omit `X-ShipyardKit-Contract-Version`.
@@ -138,10 +147,11 @@ Before installing, collect:
 3. Add `ShipyardKit/swift` as a local Swift Package in Xcode.
 4. Add product `ShipyardKit` to the app target.
 5. `import ShipyardKit`.
-6. Create the stable per-install identifier as a UUID stored in `UserDefaults`. Always reuse that value; never store, read, or migrate the installation identifier through Keychain, and do not use the Keychain-backed `ShipyardInstallationIdentifier.stable()` helper.
+6. Create the stable per-install identifier as a UUID stored in `UserDefaults`. Always reuse that value. `ShipyardInstallationIdentifier.stable()` is available as a UserDefaults-only helper.
 7. Instantiate `ShipyardClient` with your Shipyard workspace URL, product slug, and installation id provider. ShipyardKit infers the Apple platform automatically unless you explicitly override it.
    - ShipyardKit automatically includes app version (`CFBundleShortVersionString`) and build number (`CFBundleVersion`) in mobile session payloads unless you override providers.
    - ShipyardKit also sends `ShipyardClient.sdkVersion` as `shipyardKitVersion` and `X-ShipyardKit-Version`.
+   - SDK version reporting is private integration telemetry. Never include it, the installation id, continuity proof, or session token in an end-user support email.
    - ShipyardKit reports `runtimeEnvironment` as `simulator` or `physical_device` at compile time. Simulator activity remains diagnostic and does not count toward Active Devices.
 8. Add three separate ShipyardKit rows under Support: Roadmap, Announcements, and Ask. Roadmap is always visible. Announcements and Ask stay hidden unless Shipyard returns current displayable content for that row. Other Support features remain app-owned.
 9. For Apple TV/tvOS apps, wire only `pullRoadmapDaily()` by default and do not add visible Shipyard UI unless the admin instructions explicitly request it.
@@ -178,6 +188,21 @@ After the app is wired and verified, clean up the copied `ShipyardKit/` folder b
 - If the app uses a remote Swift Package URL or the SDK has been moved into the app's own package structure, remove the copied top-level `ShipyardKit/` handoff folder after confirming Xcode no longer depends on that local path.
 - Do not leave temporary `shipyardkit-config.json` files, copied example config files, or one-off setup notes in the app bundle unless the app intentionally uses them at runtime.
 - Keep the real runtime config in the app's normal configuration system and keep the stable installation ID storage in app code.
+
+## Upgrade From 0.25.2 To 0.25.3
+
+- Complete and verify the Cloudflare cutover gates before releasing an app with
+  0.25.3. Do not route 0.25.3 through Neon as a fallback.
+- ShipyardKit now persists both the installation identifier helper and the
+  continuity proof exclusively in app-local `UserDefaults`.
+- Do not add the Security framework or credential-item API calls to an app's
+  ShipyardKit integration.
+- The Cloudflare target permits one proof-persistence transition for an
+  imported verified 0.25.2 installation, then restores normal fail-closed
+  continuity behavior. A new Cloudflare installation uses the UserDefaults
+  generation from its first session.
+- Support email bodies may include the host app version and build, but must not
+  show the ShipyardKit/SDK version or any installation/session identifiers.
 
 ## Daily Roadmap Pull Only
 
@@ -295,7 +320,7 @@ _ = try await client.createPlannerTask(
 - Move the three ShipyardKit rows under Support. Keep Roadmap visible; render Announcements and Ask only when their current content exists.
 - Remove ordinary `force: true` Roadmap opens. Render cached content first and use normal `pullRoadmapDaily()` for the once-daily network read.
 - Leave all other Support features to the host app.
-- No app-side continuity setup is required. ShipyardKit stores and exchanges the server-issued installation proof automatically.
+- No app-side continuity setup is required. ShipyardKit stores and exchanges the server-issued installation proof automatically in `UserDefaults`.
 
 ## Upgrade From 0.2.0 To 0.2.1
 

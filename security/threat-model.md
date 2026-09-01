@@ -27,6 +27,9 @@
    - installationId
    - platform
 5. Token may carry optional client telemetry such as app version, build number, and ShipyardKit version.
+6. The installation id and server-issued continuity proof are app-local values
+   persisted only in `UserDefaults`. They establish continuity, not hardware
+   authenticity, and must never appear in logs or end-user support email.
 
 ## Abuse controls
 

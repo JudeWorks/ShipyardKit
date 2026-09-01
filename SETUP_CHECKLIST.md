@@ -14,11 +14,12 @@ Use this after integration to confirm ShipyardKit is ready for developer or auto
 - [ ] `shipyardBaseUrl` points to the correct Shipyard workspace deployment.
 - [ ] `productSlug` matches the product where Roadmap suggestions should land.
 - [ ] App sends a stable per-install `installationId` and does not regenerate it every launch.
-- [ ] App persists `installationId` in `UserDefaults` only and never reads, writes, or migrates that identifier through Keychain or calls the Keychain-backed `ShipyardInstallationIdentifier.stable()` helper.
+- [ ] App persists `installationId` and ShipyardKit continuity values in `UserDefaults` only; no Security framework or credential-item API is used.
 - [ ] App sends correct `platform`.
 - [ ] App sends app version and build number in mobile session payloads (ShipyardKit defaults to `CFBundleShortVersionString` and `CFBundleVersion`).
 - [ ] App sends `shipyardKitVersion` in mobile session payloads (ShipyardKit defaults to `ShipyardClient.sdkVersion`).
 - [ ] App sends compile-time `runtimeEnvironment` (`simulator` or `physical_device`) in mobile session payloads.
+- [ ] End-user support email contains the host app version/build when useful, but no ShipyardKit/SDK version, installation id, continuity proof, or session token.
 - [ ] Server has `SESSION_SECRET` set.
 
 ## Product Controls
@@ -33,9 +34,10 @@ Use this after integration to confirm ShipyardKit is ready for developer or auto
 - [ ] App calls `syncDaily()` on launch and foreground resume.
 - [ ] Repeated lifecycle calls on the same UTC day do not send duplicate Roadmap pulls, Engagement pulls, or Device Activity Events after the daily sync succeeds.
 - [ ] Failed Roadmap or Engagement content retries later the same UTC day without repeating a successful or queued Device Activity Event.
+- [ ] UI treats `offlineQueued` as saved, but does not claim success for `offlineQueueUnavailable`.
 - [ ] Opening Roadmap renders `cachedItems()` first and then calls normal `pullRoadmapDaily()`; ordinary opens do not use `force: true`.
 - [ ] The daily mobile session reports the correct product slug, stable installation id, platform, runtime environment, app version, build number, ShipyardKit version, `roadmap_pull` reason, and queued activity date when applicable.
-- [ ] Token is stored in memory only, or secure storage with expiry awareness.
+- [ ] Token remains in memory only with expiry awareness (ShipyardKit's default).
 - [ ] Expired token triggers refresh and retry.
 - [ ] App never ships a static `SERVICE_API_KEY`, `API_TOKEN`, or admin secret.
 
