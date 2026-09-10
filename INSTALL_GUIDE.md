@@ -37,7 +37,23 @@ Ask the user for these before installing if they are not already discoverable wi
 Infer platform from the Xcode project or runtime target. Report the inferred value in the final summary. Ask the user only if the repository has multiple plausible app targets and the correct one is not obvious.
 If shipyardBaseUrl or productSlug are missing and cannot be found safely, stop and ask the user before wiring the package.
 
-Upgrade note for existing ShipyardKit 0.2.0 integrations:
+Installation classification (do this before describing or planning the work):
+- A generated ShipyardKit install bundle is a **first-time install** unless the user, manifest, or existing app-target integration explicitly says ShipyardKit is already installed and being upgraded.
+- The presence of a checked-in `ShipyardKit/` folder, an older `VERSION`, package source files, `import Security` inside those package sources, or an Xcode package reference is not by itself evidence of an upgrade. Those can be stale, vendored, or copied handoff files discovered during a first install.
+- Classify the work as an **upgrade** only when the app target already imports and configures `ShipyardKit` as a working integration, or the user/manifest explicitly requests an upgrade. Do not infer a production or previously installed integration from package files alone.
+- During a first-time install, use the authenticated bundle as the authoritative package source. Reconcile or replace stale package files as ordinary install work, initialize the UserDefaults-only installation identity on first run, and do not perform legacy continuity migration.
+- During a real upgrade, preserve the app's existing stable installation identity and follow only the upgrade notes that match the installed version.
+- Report the classification and the evidence used. Never call a first-time install an upgrade merely because the repository contains older SDK code.
+
+Verification fixture evidence (follow this order exactly when verification is enabled):
+- Call `fixtures/start`, confirm its successful response, and keep the returned expected titles/fixture identifiers only in ephemeral verification notes. Do not put them in app source.
+- While those fixtures are still active, read Ask, Announcement, and Roadmap through the selected app using normal ShipyardKit mobile-session authentication. Capture the outcome for all three before cleanup.
+- Call `fixtures/cleanup` only after the app-facing read evidence has been captured, whether that evidence is a pass or a failure. A successful cleanup deletes the fixture rows and revokes the install token.
+- After successful cleanup, zero fixture records from a normal SDK read is expected cleanup behavior. It cannot prove or reproduce an earlier backend propagation failure.
+- A later `401` from the fixture endpoints means only that the install token is invalid, expired, or revoked. It does not prove which actor cleaned the session or whether pre-cleanup verification passed.
+- Claim a fixture-read or propagation failure only from evidence captured while `fixtures/start` was confirmed successful and the fixtures were active. If cleanup happened before that evidence was captured, report the verification result as **indeterminate**; do not reconstruct a pass or failure from post-cleanup reads.
+
+Upgrade note for confirmed existing ShipyardKit 0.2.0 integrations only:
 - Update the copied `ShipyardKit/swift` package plus `VERSION` and `CHANGELOG.md`.
 - Replace deprecated lifecycle calls and repeated Engagement refreshes with `syncDaily()` on launch and foreground resume.
 - Update visible Roadmap screens to render `cachedItems()` first, then call normal `pullRoadmapDaily()` and refresh the visible Roadmap only when it returns fresh data.
@@ -127,6 +143,7 @@ Deliverables:
 - summary of the Roadmap page location and upvote button voted/unvoted visual treatment
 - summary of item submission and error-handling UX
 - title of the test item submitted, and whether the user confirmed it appeared in Admin > Planning > Requests
+- fixture verification evidence captured before cleanup for Ask, Announcement, and Roadmap; if it was not captured in time, report the result as indeterminate
 - cleanup performed, including whether the local package folder was kept or the copied handoff folder was removed
 - checklist results
 ```

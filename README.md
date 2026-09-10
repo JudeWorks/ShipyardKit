@@ -16,6 +16,23 @@ upgrade window.
 
 Zip and hand off the top-level `ShipyardKit/` folder. That folder is the complete distributable package for a developer or installer.
 
+## First Install Versus Upgrade
+
+A generated install bundle means **first-time install** unless the user,
+manifest, or a working app-target integration explicitly identifies an upgrade.
+Do not classify the task as an upgrade merely because the repository contains a
+`ShipyardKit/` folder, an older `VERSION`, Swift package sources, a package
+reference, or legacy package code such as a `Security` import. Those artifacts
+may be stale or may have been copied into the repository as part of the current
+install.
+
+For a first-time install, treat the authenticated bundle as authoritative,
+reconcile or replace stale package files as normal installation work, and start
+the UserDefaults-only installation identity on the app's first run. Use the
+upgrade sections below only when the app target was already importing and
+configuring ShipyardKit before this install task, or when the user or manifest
+explicitly requests an upgrade.
+
 It ships three app-facing areas that fit well near Settings or About:
 
 - **Announcements**: one-way messages pushed from Shipyard into the app.
@@ -180,6 +197,20 @@ Before installing, collect:
 25. Run `SETUP_CHECKLIST.md` before shipping.
 26. Clean up the copied ShipyardKit handoff files after integration.
 
+## Verification Fixture Lifecycle
+
+Fixture verification has a strict evidence boundary: start the fixtures, verify
+all three expected records through the app's normal ShipyardKit mobile session,
+capture those results, and only then clean up. Cleanup deletes the temporary
+records and revokes the install token.
+
+Consequently, an SDK read that returns zero fixture records after cleanup is
+expected and says nothing about whether the records propagated before cleanup.
+A later `401` from an install-session endpoint means only that the token is no
+longer accepted; it cannot identify who performed cleanup or prove the earlier
+verification result. If the pre-cleanup app-facing evidence was not captured,
+report verification as indeterminate rather than claiming success or failure.
+
 ## Post-Install Cleanup
 
 After the app is wired and verified, clean up the copied `ShipyardKit/` folder based on how the SDK is installed:
@@ -189,7 +220,7 @@ After the app is wired and verified, clean up the copied `ShipyardKit/` folder b
 - Do not leave temporary `shipyardkit-config.json` files, copied example config files, or one-off setup notes in the app bundle unless the app intentionally uses them at runtime.
 - Keep the real runtime config in the app's normal configuration system and keep the stable installation ID storage in app code.
 
-## Upgrade From 0.25.2 To 0.25.3
+## Upgrade From 0.25.2 To 0.25.3 (Confirmed Existing Integrations Only)
 
 - Complete and verify the Cloudflare cutover gates before releasing an app with
   0.25.3. Do not route 0.25.3 through Neon as a fallback.

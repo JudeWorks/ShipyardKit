@@ -4,6 +4,8 @@ Use this after integration to confirm ShipyardKit is ready for developer or auto
 
 ## Package
 
+- [ ] Installer classified the task from app-target integration evidence: generated bundle installs default to first-time installs; package files or an older `VERSION` alone were not treated as proof of an upgrade.
+- [ ] For a first-time install, the authenticated bundle was treated as authoritative and no legacy continuity migration was attempted.
 - [ ] The app target depends on Swift package product `ShipyardKit`.
 - [ ] App code imports `ShipyardKit`.
 - [ ] No references remain to old package names.
@@ -119,6 +121,15 @@ Use this after integration to confirm ShipyardKit is ready for developer or auto
 - [ ] Web users can choose Feature or Bug Fix consistently with the app flow.
 - [ ] Web roadmap vote flow still works with cookie-based voter token.
 - [ ] App handles 401/403/429 gracefully with user-visible retry messaging.
+
+## Verification Fixtures
+
+- [ ] `fixtures/start` succeeded before app-facing fixture reads began.
+- [ ] Ask, Announcement, and Roadmap results were captured through normal ShipyardKit mobile-session authentication while the fixtures were active.
+- [ ] `fixtures/cleanup` was called only after all three app-facing outcomes were captured.
+- [ ] A post-cleanup zero-result SDK read was treated as expected cleanup behavior, not evidence of an earlier propagation failure.
+- [ ] A post-cleanup `401` was treated only as an invalid, expired, or revoked install token—not proof of who cleaned up or whether verification passed.
+- [ ] If pre-cleanup evidence was unavailable, verification was reported as indeterminate.
 
 ## Cleanup
 
