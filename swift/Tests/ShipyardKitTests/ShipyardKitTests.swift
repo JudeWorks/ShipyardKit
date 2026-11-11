@@ -502,8 +502,8 @@ final class ShipyardKitTests: XCTestCase {
                     "ok": true,
                     "serverTime": "2026-07-13T23:00:00.000Z",
                     "apiKey": [
-                        "id": "jwk_builder_1234",
-                        "name": "Shipyard Builder",
+                        "id": "jwk_studio_1234",
+                        "name": "Shipyard Studio",
                         "scopes": ["api:write"],
                         "allowedProductSlugs": [],
                         "status": "active",
@@ -520,7 +520,7 @@ final class ShipyardKitTests: XCTestCase {
         )
 
         XCTAssertTrue(status.ok)
-        XCTAssertEqual(status.apiKey.name, "Shipyard Builder")
+        XCTAssertEqual(status.apiKey.name, "Shipyard Studio")
         XCTAssertEqual(status.apiKey.scopes, ["api:write"])
     }
 

@@ -1,5 +1,39 @@
 # ShipyardKit Install Guide
 
+## Downloading a generated install bundle
+
+When the handoff supplies `manifestUrl`, `archiveUrl`, and `installToken`, fetch
+the manifest and archive from the app project's local terminal. Use an HTTP
+client such as `curl` with an explicit identifying User-Agent, for example
+`curl --user-agent "ShipyardKit-Installer/1.0"`, and the supplied
+`Authorization: Bearer <installToken>` header for both requests. Search and
+web-browsing fetch tools are unsuitable for these authenticated binary downloads.
+If `$shipyardkit-install` is unavailable, follow the generated message and this
+guide directly; the skill is optional.
+
+Keep the token out of printed commands, verbose HTTP logs, and committed files.
+Save download headers and bodies in a private task-specific `.agent-scratch/`
+directory inside the app project, exclude it from Git and app bundles, and remove
+it when finished. Require HTTP 200, valid manifest JSON, and
+a valid gzip archive before extracting. Do not extract an HTML error response,
+forward the bearer token to a different origin, or silently substitute another
+package source.
+
+If a download fails, report the step, request hostname/path without secrets,
+UTC timestamp, HTTP status, and any `CF-Ray`, `cf-error-type`, `cf-error-origin`,
+or `Retry-After` response headers. Cloudflare 1010 points to a
+browser/client-signature block; it does not establish that the install token is
+invalid. A Shipyard JSON response identifying an invalid or expired token
+requires a newly generated bundle. Stop on an explicit “do not retry” response
+or a Cloudflare block; do not loop retries, impersonate a browser, or try alternate
+hosts. Resume after the block is resolved or the owner authorizes a specific
+diagnostic attempt. If terminal access is unavailable or the download remains
+blocked, request the generated archive or an admin unblock and report this
+installation or upgrade and its verification as incomplete. Unrelated host-app
+changes do not establish a successful SDK installation.
+
+## Installing the downloaded kit
+
 Use this guide after copying this `ShipyardKit/` folder into the target app repo:
 
 ```text
@@ -46,7 +80,9 @@ Installation classification (do this before describing or planning the work):
 - Report the classification and the evidence used. Never call a first-time install an upgrade merely because the repository contains older SDK code.
 
 Verification fixture evidence (follow this order exactly when verification is enabled):
+- App publication is not required. A private, non-live app can verify through normal ShipyardKit mobile sessions on its configured tenant origin; do not change product status or visibility just to test. The temporary Ask and Announcement records must be live so their content can be read, which does not publish the app.
 - Call `fixtures/start`, confirm its successful response, and keep the returned expected titles/fixture identifiers only in ephemeral verification notes. Do not put them in app source.
+- If today's content was cached before fixture creation, perform a fresh debug content pull while the fixtures are active; do not treat that cached empty result as a failed installation.
 - While those fixtures are still active, read Ask, Announcement, and Roadmap through the selected app using normal ShipyardKit mobile-session authentication. Capture the outcome for all three before cleanup.
 - Call `fixtures/cleanup` only after the app-facing read evidence has been captured, whether that evidence is a pass or a failure. A successful cleanup deletes the fixture rows and revokes the install token.
 - After successful cleanup, zero fixture records from a normal SDK read is expected cleanup behavior. It cannot prove or reproduce an earlier backend propagation failure.
