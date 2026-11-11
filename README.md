@@ -470,3 +470,7 @@ if let updates, let announcement = updates.announcements.first {
 ## Final Verification
 
 The integration is not complete until a real test submission reaches Shipyard. Use a title that is easy to find and delete, then ask the user to check Admin > Planning > Requests. Mark the setup done only after the user confirms the test item is visible there.
+
+## Development verification
+
+GitHub Actions is intentionally disabled by the owner (November 11, 2026). Run the relevant tests, builds and security checks locally before pushing or merging; use GitHub for source backup and history. Do not re-enable hosted Actions unless the owner requests it.
