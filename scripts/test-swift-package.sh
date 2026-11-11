@@ -5,8 +5,8 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 package_dir="$script_dir/../swift"
 release_dir="$script_dir/.."
-temp_root=${TMPDIR:-/tmp}
-scratch_dir=$(mktemp -d "${temp_root%/}/shipyardkit-swift-tests.XXXXXX")
+mkdir -p "$release_dir/.agent-scratch"
+scratch_dir=$(mktemp -d "$release_dir/.agent-scratch/swift-tests.XXXXXX")
 
 cleanup() {
   rm -rf "$scratch_dir"

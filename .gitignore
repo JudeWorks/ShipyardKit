@@ -2,3 +2,5 @@
 swift/.DS_Store
 swift/.build/
 swift/.swiftpm/
+
+/.agent-scratch/
